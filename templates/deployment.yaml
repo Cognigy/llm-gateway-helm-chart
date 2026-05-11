@@ -1,0 +1,165 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "llm-gateway-app.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "llm-gateway-app.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.serviceLlmGateway.autoscaling.enabled }}
+  replicas: {{ .Values.serviceLlmGateway.replicaCount }}
+  {{- end }}
+  strategy:
+    {{- toYaml .Values.serviceLlmGateway.strategy | nindent 4 }}
+  selector:
+    matchLabels:
+      {{- include "llm-gateway-app.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "llm-gateway-app.podLabels" . | nindent 8 }}
+      annotations:
+        checksum/llm-gateway-env: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- $rabbitmqSecret := .Values.serviceLlmGateway.rabbitmq.existingSecret | default (printf "%s-rabbitmq" (include "llm-gateway-app.fullname" .)) }}
+        checksum/rabbitmq: {{ if not (lookup "v1" "Secret" .Release.Namespace $rabbitmqSecret) }}{{ $rabbitmqSecret | sha256sum }}{{ else }}{{ toYaml (lookup "v1" "Secret" .Release.Namespace $rabbitmqSecret).data | sha256sum }}{{ end }}
+        {{- $mongodbSecret := printf "%s-mongodb" (include "llm-gateway-app.fullname" .) }}
+        checksum/mongodb: {{ if not (lookup "v1" "Secret" .Release.Namespace $mongodbSecret) }}{{ $mongodbSecret | sha256sum }}{{ else }}{{ toYaml (lookup "v1" "Secret" .Release.Namespace $mongodbSecret).data | sha256sum }}{{ end }}
+        {{- $encKeySecret := .Values.serviceLlmGateway.encryptionKey.existingSecret | default (printf "%s-encryption-key" (include "llm-gateway-app.fullname" .)) }}
+        checksum/encryption-key: {{ if not (lookup "v1" "Secret" .Release.Namespace $encKeySecret) }}{{ $encKeySecret | sha256sum }}{{ else }}{{ toYaml (lookup "v1" "Secret" .Release.Namespace $encKeySecret).data | sha256sum }}{{ end }}
+        {{- $jwtSecretName := .Values.serviceLlmGateway.jwtSecret.existingSecret | default (printf "%s-jwt-secret" (include "llm-gateway-app.fullname" .)) }}
+        checksum/jwt-secret: {{ if not (lookup "v1" "Secret" .Release.Namespace $jwtSecretName) }}{{ $jwtSecretName | sha256sum }}{{ else }}{{ toYaml (lookup "v1" "Secret" .Release.Namespace $jwtSecretName).data | sha256sum }}{{ end }}
+        {{- if .Values.serviceLlmGateway.callerSecrets }}
+        {{- $callerChecksum := "" }}
+        {{- range .Values.serviceLlmGateway.callerSecrets }}
+        {{- $secretName := include "llm-gateway-app.caller.secretName" . }}
+        {{- if lookup "v1" "Secret" $.Release.Namespace $secretName }}
+        {{- $callerChecksum = printf "%s%s" $callerChecksum (toYaml (lookup "v1" "Secret" $.Release.Namespace $secretName).data) }}
+        {{- else }}
+        {{- $callerChecksum = printf "%s%s" $callerChecksum $secretName }}
+        {{- end }}
+        {{- end }}
+        checksum/caller-secrets: {{ $callerChecksum | sha256sum }}
+        {{- end }}
+      {{- with .Values.serviceLlmGateway.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.serviceLlmGateway.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.serviceLlmGateway.terminationGracePeriodSeconds }}
+      serviceAccountName: {{ include "llm-gateway-app.serviceAccountName" . }}
+      {{- include "image.pullSecretsLlmGateway" $ | nindent 6 }}
+      {{- if .Values.serviceLlmGateway.priorityClassName }}
+      priorityClassName: {{ .Values.serviceLlmGateway.priorityClassName }}
+      {{- end }}
+      {{- with .Values.serviceLlmGateway.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.serviceLlmGateway.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.serviceLlmGateway.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        # NestJS requires a writable /tmp when the root filesystem is read-only.
+        - name: tmp
+          emptyDir: {}
+        {{- if or .Values.serviceLlmGateway.rabbitmq.connectionString .Values.serviceLlmGateway.rabbitmq.existingSecret }}
+        - name: rabbitmq-connection-string
+          secret:
+            {{- if .Values.serviceLlmGateway.rabbitmq.existingSecret }}
+            secretName: {{ .Values.serviceLlmGateway.rabbitmq.existingSecret }}
+            {{- else }}
+            secretName: {{ include "llm-gateway-app.fullname" . }}-rabbitmq
+            {{- end }}
+            items:
+              - key: connection-string
+                path: rabbitmqConnectionString
+            defaultMode: 420
+        {{- end }}
+      containers:
+        - name: service-llm-gateway
+          image: {{ .Values.serviceLlmGateway.image.registry | default .Values.global.imageRegistry }}/{{ .Values.serviceLlmGateway.image.name }}:{{ .Values.serviceLlmGateway.image.tag | default (printf "v%s" .Chart.AppVersion) }}
+          imagePullPolicy: {{ .Values.serviceLlmGateway.image.pullPolicy }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: http
+              containerPort: {{ .Values.serviceLlmGateway.service.port }}
+              protocol: TCP
+            {{- if .Values.serviceLlmGateway.podMonitor.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.serviceLlmGateway.podMonitor.metricsPort }}
+              protocol: TCP
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: llm-gateway-env
+          env:
+            - name: PORT
+              value: {{ .Values.serviceLlmGateway.service.port | toString | quote }}
+            - name: METRICS_ENABLED
+              value: {{ .Values.serviceLlmGateway.podMonitor.enabled | toString | quote }}
+            - name: METRICS_PORT
+              value: {{ .Values.serviceLlmGateway.podMonitor.metricsPort | toString | quote }}
+            - name: MONGODB_URI
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "llm-gateway-app.fullname" . }}-mongodb
+                  key: connection-string
+            - name: ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.serviceLlmGateway.encryptionKey.existingSecret | default (printf "%s-encryption-key" (include "llm-gateway-app.fullname" .)) }}
+                  key: encryption-key
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.serviceLlmGateway.jwtSecret.existingSecret | default (printf "%s-jwt-secret" (include "llm-gateway-app.fullname" .)) }}
+                  key: jwt-secret
+            {{- range .Values.serviceLlmGateway.callerSecrets }}
+            - name: SERVICE_SECRET_{{ regexReplaceAll "[^a-zA-Z0-9]" .serviceId "_" | upper }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "llm-gateway-app.caller.secretName" . }}
+                  key: {{ include "llm-gateway-app.caller.secretKey" . }}
+            {{- end }}
+            {{- if .Values.serviceLlmGateway.extraEnvVars }}
+            {{- toYaml .Values.serviceLlmGateway.extraEnvVars | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if or .Values.serviceLlmGateway.rabbitmq.connectionString .Values.serviceLlmGateway.rabbitmq.existingSecret }}
+            - name: rabbitmq-connection-string
+              mountPath: /var/run/secrets/rabbitmqConnectionString
+              subPath: rabbitmqConnectionString
+              readOnly: true
+            {{- end }}
+          livenessProbe:
+            {{- toYaml .Values.serviceLlmGateway.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.serviceLlmGateway.readinessProbe | nindent 12 }}
+          startupProbe:
+            {{- toYaml .Values.serviceLlmGateway.startupProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.serviceLlmGateway.resources | nindent 12 }}
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: {{ .Values.serviceLlmGateway.lifecycle.preStopSleepSeconds }}

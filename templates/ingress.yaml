@@ -1,0 +1,36 @@
+{{- if .Values.ingress.enabled -}}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "llm-gateway-app.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "llm-gateway-app.labels" . | nindent 4 }}
+  annotations:
+    {{- if (.Values.ingress.tls.enabled) }}
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    {{- else }}
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+    {{- end }}
+    {{- if .Values.ingress.ipWhiteListMiddleware.enabled }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ $.Release.Namespace }}-ipwhitelistllmgateway@kubernetescrd
+    {{- end }}
+    {{- range $key, $value := .Values.ingress.annotations }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- include "llm-gateway-app.tlsCertificate.secretName.render" $ | nindent 2 }}
+  rules:
+    - host: {{ required "ingress.host is required when ingress is enabled" .Values.ingress.host }}
+      http:
+        paths:
+          - pathType: Prefix
+            path: "/"
+            backend:
+              service:
+                name: {{ include "llm-gateway-app.fullname" . }}
+                port:
+                  number: {{ .Values.serviceLlmGateway.service.port }}
+{{- end }}

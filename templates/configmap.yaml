@@ -1,0 +1,12 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llm-gateway-env
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "llm-gateway-app.labels" . | nindent 4 }}
+data:
+  {{- range $key, $value := .Values.llmGatewayEnv }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}

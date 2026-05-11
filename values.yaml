@@ -1,0 +1,311 @@
+# Default values for llm-gateway-app.
+#
+# Defaults are set for subchart deployment inside cognigy-ai.
+# For standalone deployment override the values listed under "Standalone:".
+#
+# Subchart of cognigy-ai (default):
+#   - imageCredentials.existingSecret: "cognigy-registry-token" (provided by parent)
+#   - rabbitmq.existingSecret: "cognigy-rabbitmq" (provided by parent)
+#   - ingress.tls.secretName: "llm-gateway-traefik" (provided by parent)
+#
+# Standalone (e.g. local dev, dedicated namespace via Flux):
+#   - Override imageCredentials.existingSecret or provide imageCredentials.registry+username+password.
+#   - Override rabbitmq.existingSecret or provide rabbitmq.connectionString.
+#   - Override ingress.tls.secretName or provide ingress.tls.crt+key.
+
+# Global configuration
+global:
+  imageRegistry: "cognigy.azurecr.io"
+nameOverride: ""
+fullnameOverride: "service-llm-gateway"
+# Team that owns this service. Used as the owner-team label on all pods.
+ownerTeam: "carbon"
+# Docker registry credentials.
+# Subchart:   existingSecret is provided by the cognigy-ai parent chart.
+# Standalone: override existingSecret, or clear it and provide registry+username+password.
+#
+# Pull secret resolution order (first match wins):
+#   1. imageCredentials.existingSecret — reference a pre-existing secret
+#   2. imageCredentials.username + password — chart creates a <fullname>-registry secret
+imageCredentials:
+  registry: "cognigy.azurecr.io"
+  username: ""
+  password: ""
+  # Name of a pre-existing Kubernetes docker-registry secret. When set,
+  # registry/username/password above are ignored and no secret is created.
+  existingSecret: "cognigy-registry-token"
+# Deployment-wide environment variables injected into all pods via the
+# llm-gateway-env ConfigMap. Do NOT place LLM provider credentials or JWT
+# signing keys here; those must be Kubernetes Secrets managed as sealed
+# secrets in flux-fleet.
+llmGatewayEnv:
+  NODE_ENV: production
+  # Log verbosity. Valid values: fatal | error | warn | info | debug | trace
+  LOG_LEVEL: info
+serviceLlmGateway:
+  replicaCount: 3
+  # grace = preStop sleep + longest expected stream + slack (15 + 300 + 45 = 360 s)
+  terminationGracePeriodSeconds: 360
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  lifecycle:
+    # Gives kube-proxy / ingress time to remove the pod from rotation before SIGTERM arrives.
+    # Must be < terminationGracePeriodSeconds.
+    preStopSleepSeconds: 15
+  image:
+    name: service-llm-gateway
+    pullPolicy: IfNotPresent
+    tag: v0.2.0
+  # Per-service extra environment variables. Each entry follows the standard
+  # Kubernetes env var format: {name: FOO, value: bar} or valueFrom.
+  extraEnvVars: []
+  service:
+    type: ClusterIP
+    port: 3000
+    annotations: {}
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 3000
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 3
+    successThreshold: 1
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /health/ready
+      port: 3000
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 3
+    successThreshold: 1
+    failureThreshold: 3
+  startupProbe:
+    httpGet:
+      path: /health
+      port: 3000
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 30
+  autoscaling:
+    enabled: false
+    minReplicas: 3
+    maxReplicas: 30
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 70
+  podMonitor:
+    enabled: true
+    metricsPort: 8002
+    path: /metrics
+    # Namespace where the PodMonitor resource is deployed. Should match the
+    # namespace where your Prometheus instance runs so the Operator discovers it
+    # without requiring specific label selectors. Defaults to Release.Namespace
+    # when left empty.
+    namespace: ""
+    additionalLabels: {}
+  # Encryption key for encrypting/decrypting sensitive data (e.g. provider credentials).
+  # Auto-generated on first install and preserved across upgrades (helm.sh/resource-policy: keep).
+  # WARNING: changing this key after data has been written will make existing data unreadable.
+  encryptionKey:
+    # Reference a pre-existing Secret (Flux/sealed-secrets environments).
+    # When set, the chart skips creation and references this secret directly.
+    existingSecret: ""
+    # Literal value for local dev. Empty = auto-generate on first install (recommended).
+    value: ""
+  # JWT secret for signing/verifying service-level Bearer tokens.
+  # Auto-generated on first install and preserved across upgrades.
+  jwtSecret:
+    # Reference a pre-existing Secret (Flux/sealed-secrets environments).
+    existingSecret: ""
+    # Literal value for local dev. Empty = auto-generate on first install (recommended).
+    value: ""
+  # Services authorized to call llm-gateway APIs.
+  #
+  # Each entry injects a SERVICE_SECRET_<NORMALIZED_ID> env var into the deployment.
+  # Normalization: non-alphanumeric → "_", uppercased.
+  # e.g. "service-api" → SERVICE_SECRET_SERVICE_API.
+  #
+  # Default (chart owns the Secret):
+  #   - serviceId: service-api
+  # Chart auto-creates Secret "llm-gateway-caller-<serviceId>" with a random
+  # 48-char password, preserved across upgrades (helm.sh/resource-policy: keep).
+  # Consuming products read this Secret by name from the same namespace.
+  #
+  # Escape hatch (pre-shared Secret managed elsewhere — e.g. sealed-secret):
+  #   - serviceId: cxone
+  #     existingSecret: cxone-llm-gateway-caller   # pre-existing Secret name
+  #     existingSecretKey: secret                  # key inside that Secret (default: "secret")
+  # When existingSecret is set the chart does not create or manage the Secret.
+  callerSecrets: []
+  # - serviceId: service-api
+  # - serviceId: service-ai
+  # - serviceId: cxone
+  #   existingSecret: cxone-llm-gateway-caller
+  #   existingSecretKey: secret
+
+  # RabbitMQ connection string (amqp://user:pass@host:port).
+  # Subchart:   existingSecret is provided by the cognigy-ai parent chart.
+  # Standalone: override existingSecret, or clear it and provide connectionString.
+  # The connection string is mounted as a file at /var/run/secrets/rabbitmqConnectionString.
+  rabbitmq:
+    existingSecret: "cognigy-rabbitmq"
+    connectionString: ""
+  networkPolicy:
+    enabled: true
+    # CIDRs from which external LLM provider API calls are permitted on port 443.
+    allowedLLMProviderCIDRs:
+      - "0.0.0.0/0"
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+    maxUnavailable: ""
+  affinity: {}
+  tolerations: []
+  nodeSelector: {}
+  podAnnotations: {}
+  podSecurityContext: {}
+  priorityClassName: ""
+# Service Account
+serviceAccount:
+  create: false
+  annotations: {}
+  name: ""
+# Ingress configuration
+ingress:
+  enabled: false
+  className: traefik
+  # Single hostname for the ingress. A valid hostname is required if ingress is enabled.
+  host: ""
+  annotations: {}
+  # IP whitelist middleware for Traefik.
+  # When enabled, adds the traefik.ingress.kubernetes.io/router.middlewares annotation
+  # referencing a Traefik IngressRoute Middleware CRD named
+  # "<namespace>-ipwhitelistllmgateway@kubernetescrd" that must exist in the cluster.
+  ipWhiteListMiddleware:
+    enabled: false
+  tls:
+    enabled: true
+    ## Existing TLS secret name. When set, crt/key below are ignored.
+    ## The secret must contain "tls.crt" and "tls.key" keys.
+    ## Subchart: the cognigy-ai parent chart provides this secret.
+    ## Standalone: override to point at your own TLS secret, or clear it and
+    ##             provide crt+key so the chart creates the secret automatically.
+    secretName: "llm-gateway-traefik"
+    ## TLS certificate + key in plaintext (not base64 encoded). Used only when
+    ## secretName is empty — the chart creates a "llm-gateway-traefik" Secret.
+    crt: ""
+    key: ""
+# Database type discriminator for future multi-backend support.
+# Currently only "mongodb" is supported.
+# Reserved for future use: dynamodb, none
+database:
+  type: mongodb
+# MongoDB configuration.
+mongodb:
+  # Connection scheme — selects the db-init flow and connection string format.
+  #   "mongodb"     → self-hosted replica set (mongosh createUser/updateUser).
+  #   "mongodb+srv" → MongoDB Atlas (atlas CLI via Atlas Admin API).
+  scheme: "mongodb"
+  # MongoDB hosts.
+  #   "mongodb":     comma-separated replica-set members, e.g.
+  #                  "mongodb-0.mongodb-headless.mongodb.svc.cluster.local:27017,..."
+  #   "mongodb+srv": the Atlas cluster SRV hostname, e.g. "cluster0.abc.mongodb.net"
+  # Required when dbinit.enabled is true.
+  hosts: ""
+  # Optional MongoDB connection string parameters appended after the database name.
+  # Leading-character convention differs by scheme:
+  #   "mongodb"     → appended after "?authSource=<db>", so params must start with "&"
+  #                   Example: "&readPreference=secondaryPreferred"
+  #   "mongodb+srv" → appended directly after "/<dbName>", so params must start with "?"
+  #                   Example: "?retryWrites=true&w=majority"
+  params: ""
+  # Standalone DB initialisation: auto-generates the service user + password and
+  # creates the MongoDB user via a Helm pre-install/pre-upgrade Job.
+  dbinit:
+    # Set to true to enable auto-generation of the connection secret and DB user creation.
+    # Requires mongodb.hosts and mongodb.auth.existingSecret to be set.
+    enabled: false
+    # Image used by the db-init Job.
+    # For scheme "mongodb":     must include mongosh.
+    # For scheme "mongodb+srv": must include the atlas CLI (mongosh not required).
+    # The Cognigy image at cognigy.azurecr.io/mongodb:<tag> bundles both.
+    image: ""
+    helmHook:
+      # Helm hook trigger events for the db-init Job.
+      hook: "pre-install,pre-upgrade"
+      # Helm hook weight. Must be a string. Lower values run first.
+      # Keep this higher than the mongodb Secret hook weight (-2) so the
+      # secret is created before the Job reads it.
+      weight: "-1"
+      # Helm hook delete policy for the db-init Job.
+      deletePolicy: before-hook-creation
+    # Number of retries before marking the Job as failed.
+    backoffLimit: 3
+    # Pod restart policy.
+    restartPolicy: Never
+    # Seconds after the Job completes before it is automatically deleted.
+    # Omitted when null (cluster default applies).
+    ttlSecondsAfterFinished: null
+    # PriorityClass name for the db-init Pod.
+    priorityClassName: ""
+    # Extra environment variables to inject into the db-init container.
+    # Each entry follows the standard Kubernetes env var format: {name: FOO, value: bar} or valueFrom.
+    extraEnvVars: []
+    resources: {}
+    securityContext: {}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+  # Credentials for the db-init Job. Which block applies depends on scheme.
+  auth:
+    # --- scheme: "mongodb" only ---
+    # Root credentials used by mongosh to create the service user.
+    # Must reference a pre-existing Secret with username + password keys.
+    # In Cognigy environments this is the "cognigy-mongodb-root-credentials" SealedSecret.
+    #
+    # Two modes:
+    #   1. existingSecret set  → use that Secret directly (production / subchart).
+    #   2. existingSecret empty → chart auto-copies root creds from auth.lookup at
+    #      hook-weight -3 (standalone / local dev). Requires the Helm deployer to have
+    #      read access to Secrets in auth.lookup.namespace.
+    existingSecret: ""
+    existingSecretUsernameKey: username
+    existingSecretPasswordKey: password
+    # Source secret for auto-lookup when existingSecret is empty.
+    lookup:
+      namespace: "mongodb"
+      secretName: "mongodb"
+      usernameValue: "root"
+      passwordKey: "mongodb-root-password"
+    # --- scheme: "mongodb+srv" only ---
+    # Atlas Admin API credentials used by the atlas CLI to manage database users.
+    # The API key must have "Project Owner" permissions on the Atlas project.
+    # See: https://www.mongodb.com/docs/atlas/configure-api-access/
+    #
+    # Two modes:
+    #   1. existingSecret set  → reference a pre-existing Secret (production / sealed-secrets).
+    #      Required keys: apikeypublic, apikeyprivate, projectid, clustername.
+    #   2. existingSecret empty → provide literal values below; the chart creates
+    #      "<fullname>-mongodb-atlas-creds" at hook-weight -3 (local dev / standalone).
+    atlas:
+      existingSecret: ""
+      projectId: ""
+      clusterName: ""
+      publicAPIKey: ""
+      privateAPIKey: ""
+  # Literal connection string for local dev/testing only.
+  # When set, the chart creates the Secret from this value (dbinit is skipped).
+  # Not used in production — use dbinit.enabled instead.
+  connectionString: ""

@@ -1,0 +1,173 @@
+{{/*
+  MongoDB database initialisation Job.
+
+  Idempotently creates (or updates) the "service-llm-gateway" user with readWrite
+  access to the "service-llm-gateway" database. The script chosen depends on
+  mongodb.scheme:
+
+    "mongodb"     → mongosh: connects as root and runs createUser/updateUser.
+    "mongodb+srv" → atlas CLI: uses the Atlas Admin API to create/update the user.
+
+  Only rendered when:
+    - database.type == "mongodb"
+    - mongodb.dbinit.enabled == true
+
+  Runs as a Helm hook (configurable via mongodb.dbinit.helmHook.hook/weight), after the
+  mongodb Secret (hook-weight -2) has been created. The Job is deleted according to
+  mongodb.dbinit.helmHook.deletePolicy before each new run so stale pods do not block upgrades.
+*/}}
+{{- if and (eq .Values.database.type "mongodb") .Values.mongodb.dbinit.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "llm-gateway-app.fullname" . }}-db-init
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "llm-gateway-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: db-init
+  annotations:
+    "helm.sh/hook": {{ .Values.mongodb.dbinit.helmHook.hook }}
+    "helm.sh/hook-weight": {{ .Values.mongodb.dbinit.helmHook.weight | quote }}
+    "helm.sh/hook-delete-policy": {{ .Values.mongodb.dbinit.helmHook.deletePolicy }}
+spec:
+  backoffLimit: {{ .Values.mongodb.dbinit.backoffLimit }}
+  {{- if .Values.mongodb.dbinit.ttlSecondsAfterFinished }}
+  ttlSecondsAfterFinished: {{ .Values.mongodb.dbinit.ttlSecondsAfterFinished }}
+  {{- end }}
+  template:
+    metadata:
+      name: {{ include "llm-gateway-app.fullname" . }}-db-init
+      labels:
+        {{- include "llm-gateway-app.labels" . | nindent 8 }}
+        app.kubernetes.io/component: db-init
+    spec:
+      restartPolicy: {{ .Values.mongodb.dbinit.restartPolicy }}
+      {{- if .Values.mongodb.dbinit.priorityClassName }}
+      priorityClassName: {{ .Values.mongodb.dbinit.priorityClassName }}
+      {{- end }}
+      {{- if .Values.mongodb.dbinit.securityContext }}
+      securityContext:
+        {{- toYaml .Values.mongodb.dbinit.securityContext | nindent 8 }}
+      {{- end }}
+      {{- if .Values.mongodb.dbinit.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.mongodb.dbinit.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.mongodb.dbinit.tolerations }}
+      tolerations:
+        {{- toYaml .Values.mongodb.dbinit.tolerations | nindent 8 }}
+      {{- end }}
+      {{- if .Values.mongodb.dbinit.affinity }}
+      affinity:
+        {{- toYaml .Values.mongodb.dbinit.affinity | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: db-init
+          image: {{ .Values.mongodb.dbinit.image }}
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "-c"]
+          {{- if eq .Values.mongodb.scheme "mongodb+srv" }}
+          args:
+            - |
+              set -e
+              export MONGODB_ATLAS_SKIP_UPDATE_CHECK=true
+              export DO_NOT_TRACK=true
+              export MONGODB_ATLAS_OUTPUT=json
+              echo "Starting Atlas database initialisation for service-llm-gateway..."
+              atlas clusters describe "$MONGODB_ATLAS_CLUSTER_NAME" --projectId "$MONGODB_ATLAS_PROJECT_ID" >/dev/null
+              if atlas dbusers describe "service-llm-gateway" --projectId "$MONGODB_ATLAS_PROJECT_ID" >/dev/null 2>&1; then
+                echo 'User "service-llm-gateway" already exists — updating password.'
+                atlas dbusers update "service-llm-gateway" --projectId "$MONGODB_ATLAS_PROJECT_ID" --password "$MONGODB_SERVICE_PASSWORD"
+              else
+                echo 'Creating user "service-llm-gateway".'
+                atlas dbusers create \
+                  --username "service-llm-gateway" \
+                  --projectId "$MONGODB_ATLAS_PROJECT_ID" \
+                  --password "$MONGODB_SERVICE_PASSWORD" \
+                  --scope "$MONGODB_ATLAS_CLUSTER_NAME" \
+                  --role "readWrite@service-llm-gateway"
+              fi
+              echo "Atlas database initialisation completed."
+          env:
+            - name: MONGODB_ATLAS_PUBLIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "llm-gateway-app.mongodbAtlas.secretName" . }}
+                  key: apikeypublic
+            - name: MONGODB_ATLAS_PRIVATE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "llm-gateway-app.mongodbAtlas.secretName" . }}
+                  key: apikeyprivate
+            - name: MONGODB_ATLAS_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "llm-gateway-app.mongodbAtlas.secretName" . }}
+                  key: projectid
+            - name: MONGODB_ATLAS_CLUSTER_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "llm-gateway-app.mongodbAtlas.secretName" . }}
+                  key: clustername
+            - name: MONGODB_SERVICE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "llm-gateway-app.fullname" . }}-mongodb
+                  key: password
+          {{- else }}
+          args:
+            - |
+              set -e
+              echo "Starting database initialisation for service-llm-gateway..."
+              mongosh "$MONGODB_ROOT_CONNECTION_STRING" --quiet --eval '
+                const dbName   = "service-llm-gateway";
+                const username = "service-llm-gateway";
+                const password = process.env.MONGODB_SERVICE_PASSWORD;
+                db = db.getSiblingDB(dbName);
+                const existing = db.getUser(username);
+                if (existing) {
+                  print("User \"" + username + "\" already exists — updating password.");
+                  db.updateUser(username, {
+                    pwd: password,
+                    roles: [{ role: "readWrite", db: dbName }]
+                  });
+                } else {
+                  print("Creating user \"" + username + "\".");
+                  db.createUser({
+                    user: username,
+                    pwd: password,
+                    roles: [{ role: "readWrite", db: dbName }]
+                  });
+                }
+                print("✓ Database \"" + dbName + "\" initialised successfully.");
+              '
+              echo "Database initialisation completed."
+          env:
+            - name: MONGODB_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mongodb.auth.existingSecret | default (printf "%s-mongodb-root" (include "llm-gateway-app.fullname" .)) }}
+                  key: {{ .Values.mongodb.auth.existingSecretUsernameKey }}
+            - name: MONGODB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mongodb.auth.existingSecret | default (printf "%s-mongodb-root" (include "llm-gateway-app.fullname" .)) }}
+                  key: {{ .Values.mongodb.auth.existingSecretPasswordKey }}
+            - name: MONGODB_ROOT_CONNECTION_STRING
+              value: "mongodb://$(MONGODB_ROOT_USER):$(MONGODB_ROOT_PASSWORD)@{{ .Values.mongodb.hosts }}/admin"
+            - name: MONGODB_SERVICE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "llm-gateway-app.fullname" . }}-mongodb
+                  key: password
+          {{- end }}
+          {{- if .Values.mongodb.dbinit.extraEnvVars }}
+          {{- toYaml .Values.mongodb.dbinit.extraEnvVars | nindent 12 }}
+          {{- end }}
+          {{- if .Values.mongodb.dbinit.resources }}
+          resources:
+            {{- toYaml .Values.mongodb.dbinit.resources | nindent 12 }}
+          {{- end }}
+      {{- include "image.pullSecretsLlmGateway" $ | nindent 6 }}
+{{- end }}
