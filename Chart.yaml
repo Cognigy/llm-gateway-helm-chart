@@ -1,0 +1,24 @@
+# Copyright Cognigy GmbH. All Rights Reserved.
+
+apiVersion: v2
+name: llm-gateway-app
+description: A Helm chart to deploy the LLM Gateway service
+type: application
+# version and appVersion are stamped at release time by build-release.yml.
+# The values here should not be updated manually.
+version: "0.2.0"
+appVersion: "0.2.0"
+kubeVersion: '<v1.35.0-0'
+home: https://cognigy.com
+icon: https://www.cognigy.com/hubfs/Cognigy.svg
+keywords:
+  - cognigy
+  - cognigy.ai
+  - llm
+  - llm-gateway
+  - large-language-models
+sources:
+  - https://github.com/Cognigy/service-llm-gateway
+maintainers:
+  - name: Cognigy SRE Team
+    email: sre@cognigy.com

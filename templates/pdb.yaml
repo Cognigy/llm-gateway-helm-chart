@@ -1,0 +1,18 @@
+{{- if .Values.serviceLlmGateway.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "llm-gateway-app.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "llm-gateway-app.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.serviceLlmGateway.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ .Values.serviceLlmGateway.podDisruptionBudget.minAvailable }}
+  {{- else if .Values.serviceLlmGateway.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.serviceLlmGateway.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "llm-gateway-app.selectorLabels" . | nindent 6 }}
+{{- end }}

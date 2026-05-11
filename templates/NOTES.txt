@@ -1,0 +1,17 @@
+{{ .Chart.Name }} deployed successfully!
+
+{{- if .Values.ingress.enabled }}
+
+Access at:
+{{- if .Values.ingress.tls.enabled }}
+  https://{{ .Values.ingress.host }}
+{{- else }}
+  http://{{ .Values.ingress.host }}
+{{- end }}
+{{- end }}
+
+Check status:
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "llm-gateway-app.name" . }}
+
+View logs:
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "llm-gateway-app.name" . }} -f

@@ -1,0 +1,24 @@
+{{- if .Values.serviceLlmGateway.podMonitor.enabled }}
+{{- $podMonitorNamespace := .Values.serviceLlmGateway.podMonitor.namespace | default .Release.Namespace }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "llm-gateway-app.fullname" . }}
+  labels:
+    {{- include "llm-gateway-app.labels" . | nindent 4 }}
+    {{- with .Values.serviceLlmGateway.podMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  namespace: {{ $podMonitorNamespace }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      {{- include "llm-gateway-app.selectorLabels" . | nindent 6 }}
+  podMetricsEndpoints:
+    - port: metrics
+      path: {{ .Values.serviceLlmGateway.podMonitor.path }}
+{{- end }}
