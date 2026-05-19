@@ -64,7 +64,7 @@ spec:
       {{- end }}
       containers:
         - name: db-init
-          image: {{ .Values.mongodb.dbinit.image }}
+          image: {{ tpl .Values.mongodb.dbinit.image $ }}
           imagePullPolicy: IfNotPresent
           command: ["/bin/bash", "-c"]
           {{- if eq .Values.mongodb.scheme "mongodb+srv" }}
@@ -155,7 +155,7 @@ spec:
                   name: {{ .Values.mongodb.auth.existingSecret | default (printf "%s-mongodb-root" (include "llm-gateway-app.fullname" .)) }}
                   key: {{ .Values.mongodb.auth.existingSecretPasswordKey }}
             - name: MONGODB_ROOT_CONNECTION_STRING
-              value: "mongodb://$(MONGODB_ROOT_USER):$(MONGODB_ROOT_PASSWORD)@{{ .Values.mongodb.hosts }}/admin"
+              value: "mongodb://$(MONGODB_ROOT_USER):$(MONGODB_ROOT_PASSWORD)@{{ tpl .Values.mongodb.hosts $ }}/admin"
             - name: MONGODB_SERVICE_PASSWORD
               valueFrom:
                 secretKeyRef:

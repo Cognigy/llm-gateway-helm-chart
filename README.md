@@ -107,23 +107,22 @@ kubectl logs -n <release-namespace> -l app.kubernetes.io/name=llm-gateway-app --
 | `serviceLlmGateway.resources.limits.memory` | Memory limit | `512Mi` |
 | `serviceLlmGateway.priorityClassName` | PriorityClass name for the pod | `""` |
 | `serviceLlmGateway.service.annotations` | Additional Service annotations | `{}` |
-| `serviceLlmGateway.autoscaling.enabled` | Enable HPA | `false` |
+| `serviceLlmGateway.autoscaling.enabled` | Enable HPA | `true` |
 | `serviceLlmGateway.podDisruptionBudget.enabled` | Enable PDB | `false` |
 | `serviceLlmGateway.podDisruptionBudget.minAvailable` | Min available pods (used when enabled) | `1` |
 | `serviceLlmGateway.podDisruptionBudget.maxUnavailable` | Max unavailable pods (used when enabled) | `""` |
-| `serviceLlmGateway.networkPolicy.enabled` | Enable network policy | `true` |
-| `serviceLlmGateway.networkPolicy.allowedLLMProviderCIDRs` | CIDRs allowed for LLM provider egress | `["0.0.0.0/0"]` |
 | `serviceLlmGateway.encryptionKey.existingSecret` | Pre-existing Secret containing the encryption key (Flux/sealed-secrets). When set, chart skips creation. | `""` |
 | `serviceLlmGateway.encryptionKey.value` | Literal encryption key for local dev. Empty = auto-generated on first install. | `""` |
 | `serviceLlmGateway.jwtSecret.existingSecret` | Pre-existing Secret containing the JWT secret (Flux/sealed-secrets). When set, chart skips creation. | `""` |
 | `serviceLlmGateway.jwtSecret.value` | Literal JWT secret for local dev. Empty = auto-generated on first install. | `""` |
-| `serviceLlmGateway.callerSecrets` | List of `{serviceId, existingSecret?, existingSecretKey?}` entries authorized to call the API. By default each entry auto-creates a Secret `llm-gateway-caller-<id>` and injects `SERVICE_SECRET_<ID>` into the deployment. | `[]` |
+| `serviceLlmGateway.staticCallerSecrets` | Pre-defaulted list of Cognigy-AI consuming services (`service-ai`, `service-api`, `service-agents`, `service-resources`, `service-playbook-execution`, `service-search-orchestrator`). Each auto-creates a Secret and injects `SERVICE_SECRET_<ID>`. Override only to change the defaults. | _(6 entries)_ |
+| `serviceLlmGateway.callerSecrets` | External / dynamic callers unique to a deployment (e.g. third-party integrations). Same `{serviceId, existingSecret?, existingSecretKey?}` shape. Concatenated with `staticCallerSecrets` at render time. | `[]` |
 | `database.type` | Database backend — only `"mongodb"` is currently supported | `"mongodb"` |
 | `mongodb.scheme` | Connection scheme: `"mongodb"` for self-hosted, `"mongodb+srv"` for Atlas | `"mongodb"` |
 | `mongodb.hosts` | Replica-set members (self-hosted) or Atlas SRV hostname (Atlas). Required when `dbinit.enabled` is true. | `""` |
 | `mongodb.params` | Optional connection string parameters appended after the database name. Leading char must be `&` for self-hosted (appended after `?authSource=…`) or `?` for Atlas (appended directly after `/<dbName>`). | `""` |
-| `mongodb.dbinit.enabled` | Enable standalone DB initialisation (auto-creates service user via Helm hooks) | `false` |
-| `mongodb.dbinit.image` | Image used by the db-init Job. Must include `mongosh` for `scheme: mongodb` and the `atlas` CLI for `scheme: mongodb+srv`. The Cognigy image at `cognigy.azurecr.io/mongodb:<tag>` bundles both. | `""` |
+| `mongodb.dbinit.enabled` | Enable standalone DB initialisation (auto-creates service user via Helm hooks) | `true` |
+| `mongodb.dbinit.image` | Image used by the db-init Job. Must include `mongosh` for `scheme: mongodb` and the `atlas` CLI for `scheme: mongodb+srv`. The Cognigy image at `cognigy.azurecr.io/mongodb:<tag>` bundles both. | `cognigy.azurecr.io/mongodb:7.0.15-debian-12-r2` |
 | `mongodb.auth.existingSecret` | Pre-existing Secret with MongoDB root credentials (self-hosted only). When empty the chart auto-copies root creds from `mongodb.auth.lookup`. | `""` |
 | `mongodb.auth.atlas.existingSecret` | Pre-existing Secret with Atlas API credentials (Atlas only). Required keys: `apikeypublic`, `apikeyprivate`, `projectid`, `clustername`. | `""` |
 | `mongodb.auth.atlas.projectId` | Atlas project ID (used when `atlas.existingSecret` is empty) | `""` |
@@ -133,7 +132,7 @@ kubectl logs -n <release-namespace> -l app.kubernetes.io/name=llm-gateway-app --
 | `mongodb.connectionString` | Literal MongoDB connection string for local dev/testing (skipped when `dbinit.enabled` is true) | `""` |
 | `serviceLlmGateway.rabbitmq.existingSecret` | Name of a pre-existing Secret containing the RabbitMQ connection string (preferred in Flux-managed environments). When set, `connectionString` is ignored. | `"cognigy-rabbitmq"` |
 | `serviceLlmGateway.rabbitmq.connectionString` | Literal RabbitMQ connection string (`amqp://user:pass@host:port`). The chart creates a Secret and mounts the value as a file. | `""` |
-| `serviceLlmGateway.podMonitor.enabled` | Enable Prometheus PodMonitor | `false` |
+| `serviceLlmGateway.podMonitor.enabled` | Enable Prometheus PodMonitor | `true` |
 | `serviceLlmGateway.podMonitor.metricsPort` | Prometheus metrics port | `8002` |
 | `serviceLlmGateway.podMonitor.namespace` | Namespace for the PodMonitor resource | `""` (release namespace) |
 | `serviceAccount.create` | Create a ServiceAccount | `false` |
@@ -280,11 +279,12 @@ preserved across upgrades (`helm.sh/resource-policy: keep`). The deployment rece
 `SERVICE_SECRET_<NORMALIZED_ID>` env var sourced from that Secret (non-alphanumeric
 characters replaced with `_`, uppercased).
 
+All standard Cognigy-AI consuming services are pre-populated in `staticCallerSecrets` — no override needed for those. Use `callerSecrets` only for external or deployment-specific callers:
+
 ```yaml
 serviceLlmGateway:
   callerSecrets:
-    - serviceId: service-api    # → Secret "llm-gateway-caller-service-api", env SERVICE_SECRET_SERVICE_API
-    - serviceId: service-ai
+    - serviceId: cxone    # → Secret "llm-gateway-caller-cxone", env SERVICE_SECRET_CXONE
 ```
 
 **Pre-shared secret (escape hatch).** When a caller's password is managed elsewhere
@@ -294,7 +294,6 @@ entry to reference that Secret instead of having the chart create one:
 ```yaml
 serviceLlmGateway:
   callerSecrets:
-    - serviceId: service-api
     - serviceId: cxone
       existingSecret: cxone-llm-gateway-caller
       existingSecretKey: secret    # default: "secret"

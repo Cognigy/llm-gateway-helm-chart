@@ -58,7 +58,7 @@ serviceLlmGateway:
   image:
     name: service-llm-gateway
     pullPolicy: IfNotPresent
-    tag: v0.2.1
+    tag: v0.3.0
   # Per-service extra environment variables. Each entry follows the standard
   # Kubernetes env var format: {name: FOO, value: bar} or valueFrom.
   extraEnvVars: []
@@ -68,10 +68,10 @@ serviceLlmGateway:
     annotations: {}
   resources:
     requests:
-      cpu: 250m
+      cpu: 0.3
       memory: 256Mi
     limits:
-      cpu: 500m
+      cpu: 0.5
       memory: 512Mi
   livenessProbe:
     httpGet:
@@ -100,9 +100,9 @@ serviceLlmGateway:
     timeoutSeconds: 3
     failureThreshold: 30
   autoscaling:
-    enabled: false
+    enabled: true
     minReplicas: 3
-    maxReplicas: 30
+    maxReplicas: 50
     targetCPUUtilizationPercentage: 80
     targetMemoryUtilizationPercentage: 70
   podMonitor:
@@ -137,20 +137,22 @@ serviceLlmGateway:
   # Normalization: non-alphanumeric → "_", uppercased.
   # e.g. "service-api" → SERVICE_SECRET_SERVICE_API.
   #
-  # Default (chart owns the Secret):
-  #   - serviceId: service-api
-  # Chart auto-creates Secret "llm-gateway-caller-<serviceId>" with a random
-  # 48-char password, preserved across upgrades (helm.sh/resource-policy: keep).
-  # Consuming products read this Secret by name from the same namespace.
+  # Each entry injects SERVICE_SECRET_<NORMALIZED_ID> into the deployment.
+  # Chart auto-creates "llm-gateway-caller-<serviceId>" (random 48-char password, preserved
+  # across upgrades). Set existingSecret to reference a pre-managed Secret instead.
   #
-  # Escape hatch (pre-shared Secret managed elsewhere — e.g. sealed-secret):
-  #   - serviceId: cxone
-  #     existingSecret: cxone-llm-gateway-caller   # pre-existing Secret name
-  #     existingSecretKey: secret                  # key inside that Secret (default: "secret")
-  # When existingSecret is set the chart does not create or manage the Secret.
+  # staticCallerSecrets: standard Cognigy-AI consuming services — defaulted here so
+  # individual deployments do not need to repeat them.
+  staticCallerSecrets:
+    - serviceId: service-ai
+    - serviceId: service-api
+    - serviceId: service-agents
+    - serviceId: service-resources
+    - serviceId: service-playbook-execution
+    - serviceId: service-search-orchestrator
+  # callerSecrets: external / dynamic callers unique to a specific deployment.
+  # e.g. third-party integrations or sealed-secret-managed tokens.
   callerSecrets: []
-  # - serviceId: service-api
-  # - serviceId: service-ai
   # - serviceId: cxone
   #   existingSecret: cxone-llm-gateway-caller
   #   existingSecretKey: secret
@@ -162,11 +164,6 @@ serviceLlmGateway:
   rabbitmq:
     existingSecret: "cognigy-rabbitmq"
     connectionString: ""
-  networkPolicy:
-    enabled: true
-    # CIDRs from which external LLM provider API calls are permitted on port 443.
-    allowedLLMProviderCIDRs:
-      - "0.0.0.0/0"
   podDisruptionBudget:
     enabled: false
     minAvailable: 1
@@ -236,12 +233,12 @@ mongodb:
   dbinit:
     # Set to true to enable auto-generation of the connection secret and DB user creation.
     # Requires mongodb.hosts and mongodb.auth.existingSecret to be set.
-    enabled: false
+    enabled: true
     # Image used by the db-init Job.
     # For scheme "mongodb":     must include mongosh.
     # For scheme "mongodb+srv": must include the atlas CLI (mongosh not required).
     # The Cognigy image at cognigy.azurecr.io/mongodb:<tag> bundles both.
-    image: ""
+    image: "cognigy.azurecr.io/mongodb:7.0.15-debian-12-r2"
     helmHook:
       # Helm hook trigger events for the db-init Job.
       hook: "pre-install,pre-upgrade"

@@ -29,9 +29,10 @@ spec:
         checksum/encryption-key: {{ if not (lookup "v1" "Secret" .Release.Namespace $encKeySecret) }}{{ $encKeySecret | sha256sum }}{{ else }}{{ toYaml (lookup "v1" "Secret" .Release.Namespace $encKeySecret).data | sha256sum }}{{ end }}
         {{- $jwtSecretName := .Values.serviceLlmGateway.jwtSecret.existingSecret | default (printf "%s-jwt-secret" (include "llm-gateway-app.fullname" .)) }}
         checksum/jwt-secret: {{ if not (lookup "v1" "Secret" .Release.Namespace $jwtSecretName) }}{{ $jwtSecretName | sha256sum }}{{ else }}{{ toYaml (lookup "v1" "Secret" .Release.Namespace $jwtSecretName).data | sha256sum }}{{ end }}
-        {{- if .Values.serviceLlmGateway.callerSecrets }}
+        {{- $allCallerSecrets := concat (default list .Values.serviceLlmGateway.staticCallerSecrets) (default list .Values.serviceLlmGateway.callerSecrets) }}
+        {{- if $allCallerSecrets }}
         {{- $callerChecksum := "" }}
-        {{- range .Values.serviceLlmGateway.callerSecrets }}
+        {{- range $allCallerSecrets }}
         {{- $secretName := include "llm-gateway-app.caller.secretName" . }}
         {{- if lookup "v1" "Secret" $.Release.Namespace $secretName }}
         {{- $callerChecksum = printf "%s%s" $callerChecksum (toYaml (lookup "v1" "Secret" $.Release.Namespace $secretName).data) }}
@@ -132,7 +133,7 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.serviceLlmGateway.jwtSecret.existingSecret | default (printf "%s-jwt-secret" (include "llm-gateway-app.fullname" .)) }}
                   key: jwt-secret
-            {{- range .Values.serviceLlmGateway.callerSecrets }}
+            {{- range concat (default list .Values.serviceLlmGateway.staticCallerSecrets) (default list .Values.serviceLlmGateway.callerSecrets) }}
             - name: SERVICE_SECRET_{{ regexReplaceAll "[^a-zA-Z0-9]" .serviceId "_" | upper }}
               valueFrom:
                 secretKeyRef:
