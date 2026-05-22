@@ -58,7 +58,7 @@ serviceLlmGateway:
   image:
     name: service-llm-gateway
     pullPolicy: IfNotPresent
-    tag: v0.3.0
+    tag: v0.3.1
   # Per-service extra environment variables. Each entry follows the standard
   # Kubernetes env var format: {name: FOO, value: bar} or valueFrom.
   extraEnvVars: []
@@ -106,7 +106,7 @@ serviceLlmGateway:
     targetCPUUtilizationPercentage: 80
     targetMemoryUtilizationPercentage: 70
   podMonitor:
-    enabled: true
+    enabled: false
     metricsPort: 8002
     path: /metrics
     # Namespace where the PodMonitor resource is deployed. Should match the
