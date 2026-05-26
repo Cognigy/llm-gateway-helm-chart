@@ -8,7 +8,9 @@ metadata:
   labels:
     {{- include "llm-gateway-app.labels" . | nindent 4 }}
   annotations:
-    {{- if (.Values.ingress.tls.enabled) }}
+    {{- if (.Values.ingress.entrypointsOverride) }}
+    traefik.ingress.kubernetes.io/router.entrypoints: {{ .Values.ingress.entrypointsOverride }}
+    {{- else if (.Values.ingress.tls.enabled) }}
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
     {{- else }}
     traefik.ingress.kubernetes.io/router.entrypoints: web

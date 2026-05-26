@@ -58,7 +58,7 @@ serviceLlmGateway:
   image:
     name: service-llm-gateway
     pullPolicy: IfNotPresent
-    tag: v0.3.1
+    tag: v0.3.4
   # Per-service extra environment variables. Each entry follows the standard
   # Kubernetes env var format: {name: FOO, value: bar} or valueFrom.
   extraEnvVars: []
@@ -204,6 +204,8 @@ ingress:
     ## secretName is empty — the chart creates a "llm-gateway-traefik" Secret.
     crt: ""
     key: ""
+  # Override the name of the traefik entrypoints.
+  entrypointsOverride: ""
 # Database type discriminator for future multi-backend support.
 # Currently only "mongodb" is supported.
 # Reserved for future use: dynamodb, none
