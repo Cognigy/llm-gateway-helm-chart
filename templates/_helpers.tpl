@@ -51,6 +51,7 @@ helm.sh/chart: {{ include "llm-gateway-app.chart" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+owner-team: {{ .Values.ownerTeam }}
 {{- end }}
 
 
@@ -127,7 +128,6 @@ Cognigy guidelines.
 {{ include "llm-gateway-app.labels" . }}
 app: service-llm-gateway
 app.kubernetes.io/component: service-llm-gateway
-owner-team: {{ .Values.ownerTeam }}
 {{- end }}
 
 

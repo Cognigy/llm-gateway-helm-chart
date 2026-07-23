@@ -7,7 +7,6 @@ metadata:
   labels:
     {{- include "llm-gateway-app.labels" . | nindent 4 }}
     app: service-llm-gateway
-    owner-team: {{ .Values.ownerTeam }}
   {{- with .Values.serviceLlmGateway.service.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}

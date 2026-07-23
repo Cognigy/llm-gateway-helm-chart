@@ -18,7 +18,7 @@ global:
   imageRegistry: "cognigy.azurecr.io"
 nameOverride: ""
 fullnameOverride: "service-llm-gateway"
-# Team that owns this service. Used as the owner-team label on all pods.
+# Team that owns this service. Used as the owner-team label on all resources.
 ownerTeam: "carbon"
 # Docker registry credentials.
 # Subchart:   existingSecret is provided by the cognigy-ai parent chart.
@@ -42,6 +42,18 @@ llmGatewayEnv:
   NODE_ENV: production
   # Log verbosity. Valid values: fatal | error | warn | info | debug | trace
   LOG_LEVEL: info
+  # Token usage event publishing. Valid: noop (default), rabbitmq.
+  TOKEN_USAGE_PUBLISHER_TYPE: noop
+  RABBITMQ_TOKEN_USAGE_EXCHANGE: token-usage-exchange
+  RABBITMQ_TOKEN_USAGE_ROUTING_KEY: token-usage.events
+## OpenTelemetry observability.
+observability:
+  ## Base URL of the OpenTelemetry Collector OTLP/HTTP receiver (port 4318).
+  ## The exporter appends /v1/traces; do NOT include that path here.
+  ## When empty, the NodeSDK never registers a provider and tracing is a no-op.
+  otlpEndpoint: ""
+  ## Sampler. "parentbased_always_on" honours upstream sampling decisions.
+  tracesSampler: "parentbased_always_on"
 serviceLlmGateway:
   replicaCount: 3
   # grace = preStop sleep + longest expected stream + slack (15 + 300 + 45 = 360 s)
@@ -58,7 +70,7 @@ serviceLlmGateway:
   image:
     name: service-llm-gateway
     pullPolicy: IfNotPresent
-    tag: v0.4.0
+    tag: v0.5.0
   # Per-service extra environment variables. Each entry follows the standard
   # Kubernetes env var format: {name: FOO, value: bar} or valueFrom.
   extraEnvVars: []
@@ -131,6 +143,36 @@ serviceLlmGateway:
     existingSecret: ""
     # Literal value for local dev. Empty = auto-generate on first install (recommended).
     value: ""
+  # ConfigSetPool — pool-based config set resolution. Always deployed.
+  configSetPool:
+    # Load-balancing strategy across pool members: "round-robin" (Redis INCR) or "random".
+    lbStrategy: round-robin
+    # Retries with the next pool member on 429/5xx/timeout.
+    poolMemberRetryCount: 1
+    credentials:
+      existingSecret: ""
+    # List of config sets. Each entry defines one model+provider combination.
+    # Add as many as needed — the configmap template ranges over this list.
+    # Example entry:
+    # configSets:
+    #   - externalId: abc
+    #     name: my-model-1
+    #     provider: abc
+    #     modelType: gpt-4o-mini
+    #     modelGroup: prompt
+    #     credentialScheme: aws-iam
+    #     credentialsEncrypted: AWS_API_KEY
+    #     providerConfig:
+    #       region: us-east-1
+    configSets: []
+    # List of pools. Each pool references one or more config sets by configSetId.
+    # Example entry:
+    # pools:
+    #   - name: myPool
+    #     quotaAdapterKey: QuotaAdaptorKey
+    #     members:
+    #       - configSetId: my-model-1
+    pools: []
   # Services authorized to call llm-gateway APIs.
   #
   # Each entry injects a SERVICE_SECRET_<NORMALIZED_ID> env var into the deployment.
@@ -164,6 +206,12 @@ serviceLlmGateway:
   rabbitmq:
     existingSecret: "cognigy-rabbitmq"
     connectionString: ""
+  # Usage service for in-platform LLM quota enforcement.
+  # baseUrl: base URL of the usage service (sets LLM_USAGE_API_BASE_URL).
+  # existingSecret: name of a secret with key "api-key" (sets LLM_USAGE_API_KEY).
+  usageService:
+    baseUrl: ""
+    existingSecret: ""
   podDisruptionBudget:
     enabled: false
     minAvailable: 1
@@ -308,3 +356,15 @@ mongodb:
   # When set, the chart creates the Secret from this value (dbinit is skipped).
   # Not used in production — use dbinit.enabled instead.
   connectionString: ""
+# Redis — shared infrastructure.
+# When host is empty the module skips Redis and round-robin falls back to random.
+redis:
+  enabled: true
+  host: "redis-ha-headless"
+  passwordSecretName: "cognigy-redis-password"
+  passwordSecretKey: "REDIS_PASSWORD"
+  sentinel:
+    enabled: true
+    host: "redis-ha-headless"
+    port: "26379"
+    masterName: "mymaster"

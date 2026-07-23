@@ -42,6 +42,10 @@ spec:
         {{- end }}
         checksum/caller-secrets: {{ $callerChecksum | sha256sum }}
         {{- end }}
+        {{- if .Values.redis.enabled }}
+        {{- $redisSecret := .Values.redis.passwordSecretName | default "cognigy-redis-password" }}
+        checksum/redis: {{ if not (lookup "v1" "Secret" .Release.Namespace $redisSecret) }}{{ $redisSecret | sha256sum }}{{ else }}{{ toYaml (lookup "v1" "Secret" .Release.Namespace $redisSecret).data | sha256sum }}{{ end }}
+        {{- end }}
       {{- with .Values.serviceLlmGateway.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -72,6 +76,17 @@ spec:
         # NestJS requires a writable /tmp when the root filesystem is read-only.
         - name: tmp
           emptyDir: {}
+        - name: config-set-pool
+          configMap:
+            name: {{ include "llm-gateway-app.fullname" . }}-config-set-pool
+        - name: config-set-pool-credentials
+          secret:
+            secretName: {{ .Values.serviceLlmGateway.configSetPool.credentials.existingSecret | default (printf "%s-config-set-pool-credentials" (include "llm-gateway-app.fullname" .)) }}
+        {{- if .Values.redis.enabled }}
+        - name: redis-password
+          secret:
+            secretName: {{ .Values.redis.passwordSecretName | default "cognigy-redis-password" | quote }}
+        {{- end }}
         {{- if or .Values.serviceLlmGateway.rabbitmq.connectionString .Values.serviceLlmGateway.rabbitmq.existingSecret }}
         - name: rabbitmq-connection-string
           secret:
@@ -140,12 +155,69 @@ spec:
                   name: {{ include "llm-gateway-app.caller.secretName" . }}
                   key: {{ include "llm-gateway-app.caller.secretKey" . }}
             {{- end }}
+            - name: CONFIG_SET_POOL_CONFIG_PATH
+              value: /etc/llm-gateway/config-set-pool/configSetPool.json
+            - name: CREDENTIALS_DIR
+              value: /etc/llm-gateway/credentials
+            - name: LB_STRATEGY
+              value: {{ .Values.serviceLlmGateway.configSetPool.lbStrategy | default "round-robin" | quote }}
+            - name: POOL_MEMBER_RETRY_COUNT
+              value: {{ .Values.serviceLlmGateway.configSetPool.poolMemberRetryCount | default 1 | toString | quote }}
+            - name: REDIS_HOST
+              value: {{ .Values.redis.host | default "" | quote }}
+            - name: REDIS_PORT
+              value: {{ .Values.redis.port | default 6379 | toString | quote }}
+            - name: REDIS_USE_TLS
+              value: {{ .Values.redis.useTls | default false | toString | quote }}
+            - name: REDIS_ENABLE_RECONNECT
+              value: {{ .Values.redis.enableReconnect | default false | toString | quote }}
+            - name: FEATURE_REDIS_SENTINEL_MODE_ENABLED
+              value: {{ .Values.redis.sentinel.enabled | default false | toString | quote }}
+            - name: REDIS_SENTINEL_HOST
+              value: {{ .Values.redis.sentinel.host | default "" | quote }}
+            - name: REDIS_SENTINEL_PORT
+              value: {{ .Values.redis.sentinel.port | default 26379 | toString | quote }}
+            - name: REDIS_SENTINEL_MASTER_NAME
+              value: {{ .Values.redis.sentinel.masterName | default "mymaster" | quote }}
+            {{- if .Values.serviceLlmGateway.usageService.baseUrl }}
+            - name: LLM_USAGE_API_BASE_URL
+              value: {{ .Values.serviceLlmGateway.usageService.baseUrl | quote }}
+            {{- end }}
+            {{- if .Values.serviceLlmGateway.usageService.existingSecret }}
+            - name: LLM_USAGE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.serviceLlmGateway.usageService.existingSecret }}
+                  key: api-key
+            {{- end }}
             {{- if .Values.serviceLlmGateway.extraEnvVars }}
             {{- toYaml .Values.serviceLlmGateway.extraEnvVars | nindent 12 }}
+            {{- end }}
+            {{- if .Values.observability.otlpEndpoint }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.observability.otlpEndpoint | quote }}
+            - name: OTEL_TRACES_SAMPLER
+              value: {{ .Values.observability.tracesSampler | quote }}
+            {{- with .Values.observability.resourceAttributes }}
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: {{ . | quote }}
+            {{- end }}
             {{- end }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: config-set-pool
+              mountPath: /etc/llm-gateway/config-set-pool
+              readOnly: true
+            - name: config-set-pool-credentials
+              mountPath: /etc/llm-gateway/credentials
+              readOnly: true
+            {{- if .Values.redis.enabled }}
+            - name: redis-password
+              mountPath: /var/run/secrets/redis-password.conf
+              subPath: redis-password.conf
+              readOnly: true
+            {{- end }}
             {{- if or .Values.serviceLlmGateway.rabbitmq.connectionString .Values.serviceLlmGateway.rabbitmq.existingSecret }}
             - name: rabbitmq-connection-string
               mountPath: /var/run/secrets/rabbitmqConnectionString
