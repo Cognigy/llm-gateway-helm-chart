@@ -70,7 +70,7 @@ serviceLlmGateway:
   image:
     name: service-llm-gateway
     pullPolicy: IfNotPresent
-    tag: v0.5.0
+    tag: v0.6.0
   # Per-service extra environment variables. Each entry follows the standard
   # Kubernetes env var format: {name: FOO, value: bar} or valueFrom.
   extraEnvVars: []
@@ -209,6 +209,9 @@ serviceLlmGateway:
   # Usage service for in-platform LLM quota enforcement.
   # baseUrl: base URL of the usage service (sets LLM_USAGE_API_BASE_URL).
   # existingSecret: name of a secret with key "api-key" (sets LLM_USAGE_API_KEY).
+  # To control fail-open/fail-closed behavior when the usage service is down, set
+  # QUOTA_FAIL_OPEN_ON_USAGE_SERVICE_DOWN via extraEnvVars (defaults to "false" — fail
+  # closed; set to "true" to fail open, e.g. in production).
   usageService:
     baseUrl: ""
     existingSecret: ""

@@ -70,6 +70,21 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 
 {{/*
 -------------------------------------------------------------------------------
+Labels for Secrets. Deliberately omits helm.sh/chart and
+app.kubernetes.io/version — both change on every chart release and cause the
+Secret's metadata to diff on every deploy, which floods secret-backup tooling
+with no-op change noise.
+-------------------------------------------------------------------------------
+*/}}
+{{- define "llm-gateway-app.secretLabels" -}}
+{{ include "llm-gateway-app.selectorLabels" . }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+owner-team: {{ .Values.ownerTeam }}
+{{- end }}
+
+
+{{/*
+-------------------------------------------------------------------------------
 Resolve the ServiceAccount name.
 Uses serviceAccount.name from values if set, otherwise falls back to the
 chart fullname so that the SA and Deployment reference the same name.
