@@ -70,7 +70,7 @@ serviceLlmGateway:
   image:
     name: service-llm-gateway
     pullPolicy: IfNotPresent
-    tag: v0.6.0
+    tag: v0.7.0
   # Per-service extra environment variables. Each entry follows the standard
   # Kubernetes env var format: {name: FOO, value: bar} or valueFrom.
   extraEnvVars: []
@@ -192,6 +192,7 @@ serviceLlmGateway:
     - serviceId: service-resources
     - serviceId: service-playbook-execution
     - serviceId: service-search-orchestrator
+    - serviceId: service-insights-api
   # callerSecrets: external / dynamic callers unique to a specific deployment.
   # e.g. third-party integrations or sealed-secret-managed tokens.
   callerSecrets: []
@@ -366,6 +367,7 @@ redis:
   host: "redis-ha-headless"
   passwordSecretName: "cognigy-redis-password"
   passwordSecretKey: "REDIS_PASSWORD"
+  enableReconnect: true
   sentinel:
     enabled: true
     host: "redis-ha-headless"
