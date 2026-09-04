@@ -13,7 +13,7 @@ data:
         {{- if $i }},{{ end }}
         {
           "externalId": {{ $cs.externalId | quote }},
-          "name": {{ $cs.name | quote }},
+          "name": {{ $cs.name | default $cs.externalId | quote }},
           "provider": {{ $cs.provider | quote }},
           "modelType": {{ $cs.modelType | quote }},
           "modelGroup": {{ $cs.modelGroup | quote }},

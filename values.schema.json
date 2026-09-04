@@ -1,0 +1,118 @@
+{
+	"$schema": "https://json-schema.org/draft-07/schema#",
+	"properties": {
+		"serviceLlmGateway": {
+			"type": "object",
+			"properties": {
+				"configSetPool": {
+					"$ref": "#/$defs/configSetPool"
+				}
+			}
+		}
+	},
+	"$defs": {
+		"configSetPool": {
+			"type": "object",
+			"description": "Pool-based config set resolution, rendered into the config-set-pool ConfigMap/Secret. Must match IConfigSetPoolConfigMap in service-llm-gateway's config-set-pool.interface.ts",
+			"properties": {
+				"lbStrategy": {
+					"type": "string",
+					"enum": ["round-robin", "random"]
+				},
+				"poolMemberRetryCount": {
+					"type": "integer",
+					"minimum": 0
+				},
+				"credentials": {
+					"type": "object",
+					"properties": {
+						"existingSecret": { "type": "string" },
+						"keys": {
+							"type": "object",
+							"additionalProperties": { "type": "string" }
+						}
+					}
+				},
+				"configSets": {
+					"type": "array",
+					"items": { "$ref": "#/$defs/configSet" }
+				},
+				"pools": {
+					"type": "array",
+					"items": { "$ref": "#/$defs/pool" }
+				}
+			}
+		},
+		"configSet": {
+			"type": "object",
+			"description": "One model+provider combination, matches IPoolConfigSet / ConfigSet mongoose schema (SUPPORTED_PROVIDERS, SUPPORTED_CONFIG_SET_TYPES, SUPPORTED_MODEL_GROUPS)",
+			"properties": {
+				"externalId": { "type": "string", "minLength": 1 },
+				"name": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Optional; defaults to externalId when omitted"
+				},
+				"provider": {
+					"type": "string",
+					"enum": [
+						"openai",
+						"azure-openai",
+						"openai-compatible",
+						"anthropic",
+						"gemini",
+						"google-vertex-ai",
+						"aws-bedrock",
+						"mistral"
+					]
+				},
+				"modelType": { "type": "string", "minLength": 1 },
+				"modelGroup": {
+					"type": "string",
+					"enum": ["prompt", "embedding"]
+				},
+				"credentialScheme": {
+					"type": "string",
+					"enum": ["api-key", "oauth2", "service-account", "aws-iam", "aws-iam-role"]
+				},
+				"credentialsEncrypted": {
+					"type": "string",
+					"minLength": 1,
+					"description": "Filename (basename only) under CREDENTIALS_DIR; must be a key present in configSetPool.credentials.keys unless credentials.existingSecret is used"
+				},
+				"providerConfig": { "type": "object" }
+			},
+			"required": [
+				"externalId",
+				"provider",
+				"modelType",
+				"modelGroup",
+				"credentialScheme",
+				"credentialsEncrypted"
+			]
+		},
+		"pool": {
+			"type": "object",
+			"description": "Matches IPool in config-set-pool.interface.ts",
+			"properties": {
+				"name": { "type": "string", "minLength": 1 },
+				"quotaAdapterKey": { "type": "string", "minLength": 1 },
+				"members": {
+					"type": "array",
+					"minItems": 1,
+					"items": { "$ref": "#/$defs/poolMember" }
+				}
+			},
+			"required": ["name", "members"]
+		},
+		"poolMember": {
+			"type": "object",
+			"description": "Matches IPoolMember in config-set-pool.interface.ts",
+			"properties": {
+				"configSetId": { "type": "string", "minLength": 1 },
+				"validUntil": { "type": "string" }
+			},
+			"required": ["configSetId"]
+		}
+	}
+}
