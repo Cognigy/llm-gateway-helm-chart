@@ -2,6 +2,30 @@ apiVersion: v1
 entries:
   llm-gateway-app:
   - apiVersion: v2
+    appVersion: 1.0.0
+    created: "2026-09-18T13:39:27.24979224Z"
+    description: A Helm chart to deploy the LLM Gateway service
+    digest: 7526c7f3be12fc9d53afee28b3b9566189f21ae22a77f6d1337360fdc7ad483a
+    home: https://cognigy.com
+    icon: https://www.cognigy.com/hubfs/Cognigy.svg
+    keywords:
+    - cognigy
+    - cognigy.ai
+    - llm
+    - llm-gateway
+    - large-language-models
+    kubeVersion: <v1.36.0-0
+    maintainers:
+    - email: sre@cognigy.com
+      name: Cognigy SRE Team
+    name: llm-gateway-app
+    sources:
+    - https://github.com/Cognigy/service-llm-gateway
+    type: application
+    urls:
+    - https://github.com/Cognigy/llm-gateway-helm-chart/releases/download/v1.0.0/llm-gateway-app-1.0.0.tgz
+    version: 1.0.0
+  - apiVersion: v2
     appVersion: 0.10.0
     created: "2026-09-17T08:11:02.683631384Z"
     description: A Helm chart to deploy the LLM Gateway service
@@ -313,4 +337,4 @@ entries:
     urls:
     - https://github.com/Cognigy/llm-gateway-helm-chart/releases/download/v0.2.0/llm-gateway-app-0.2.0.tgz
     version: 0.2.0
-generated: "2026-09-17T08:11:02.682337446Z"
+generated: "2026-09-18T13:39:27.248261409Z"
