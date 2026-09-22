@@ -42,8 +42,8 @@ llmGatewayEnv:
   NODE_ENV: production
   # Log verbosity. Valid values: fatal | error | warn | info | debug | trace
   LOG_LEVEL: info
-  # Token usage event publishing. Valid: noop (default), rabbitmq.
-  TOKEN_USAGE_PUBLISHER_TYPE: noop
+  # Token usage event publishing. Valid: noop, rabbitmq (default).
+  TOKEN_USAGE_PUBLISHER_TYPE: rabbitmq
   RABBITMQ_TOKEN_USAGE_EXCHANGE: token-usage-exchange
   RABBITMQ_TOKEN_USAGE_ROUTING_KEY: token-usage.events
 ## OpenTelemetry observability.
@@ -70,7 +70,7 @@ serviceLlmGateway:
   image:
     name: service-llm-gateway
     pullPolicy: IfNotPresent
-    tag: v1.0.0
+    tag: v1.1.0
   # Per-service extra environment variables. Each entry follows the standard
   # Kubernetes env var format: {name: FOO, value: bar} or valueFrom.
   extraEnvVars: []
@@ -170,6 +170,7 @@ serviceLlmGateway:
     # pools:
     #   - name: myPool
     #     quotaAdapterKey: QuotaAdaptorKey
+    #     modelType: gpt-4o-mini
     #     members:
     #       - configSetId: my-model-1
     pools: []

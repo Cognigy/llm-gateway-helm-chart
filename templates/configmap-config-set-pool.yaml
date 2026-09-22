@@ -30,6 +30,7 @@ data:
         {
           "name": {{ $pool.name | quote }},
           "quotaAdapterKey": {{ $pool.quotaAdapterKey | quote }},
+          "modelType": {{ $pool.modelType | quote }},
           "members": {{ $pool.members | toJson }}
         }
         {{- end }}
