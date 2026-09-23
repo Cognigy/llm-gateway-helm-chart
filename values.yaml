@@ -44,6 +44,7 @@ llmGatewayEnv:
   LOG_LEVEL: info
   # Token usage event publishing. Valid: noop, rabbitmq (default).
   TOKEN_USAGE_PUBLISHER_TYPE: rabbitmq
+  RABBITMQ_ENABLE_RECONNECT: true
   RABBITMQ_TOKEN_USAGE_EXCHANGE: token-usage-exchange
   RABBITMQ_TOKEN_USAGE_ROUTING_KEY: token-usage.events
 ## OpenTelemetry observability.
@@ -70,7 +71,7 @@ serviceLlmGateway:
   image:
     name: service-llm-gateway
     pullPolicy: IfNotPresent
-    tag: v1.1.0
+    tag: v1.1.1
   # Per-service extra environment variables. Each entry follows the standard
   # Kubernetes env var format: {name: FOO, value: bar} or valueFrom.
   extraEnvVars: []
