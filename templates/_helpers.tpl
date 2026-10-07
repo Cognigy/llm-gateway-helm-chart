@@ -208,3 +208,16 @@ When existingSecret is set, the chart references that pre-shared Secret instead
 {{- define "llm-gateway-app.caller.secretKey" -}}
 {{- default "secret" .existingSecretKey -}}
 {{- end -}}
+
+{{/*
+Renders a value that is either a YAML structure or a template string (same contract as cognigy-ai-app's
+common.tplvalues.render, kept separate so the chart also works standalone).
+Usage: {{ include "llm-gateway-app.tplvalues.render" (dict "value" .Values.path.to.value "context" $) }}
+*/}}
+{{- define "llm-gateway-app.tplvalues.render" -}}
+{{- if typeIs "string" .value }}
+{{- tpl .value .context }}
+{{- else }}
+{{- tpl (.value | toYaml) .context }}
+{{- end }}
+{{- end -}}

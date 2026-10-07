@@ -71,7 +71,7 @@ serviceLlmGateway:
   image:
     name: service-llm-gateway
     pullPolicy: IfNotPresent
-    tag: v1.1.1
+    tag: v1.2.0
   # Per-service extra environment variables. Each entry follows the standard
   # Kubernetes env var format: {name: FOO, value: bar} or valueFrom.
   extraEnvVars: []
@@ -118,6 +118,30 @@ serviceLlmGateway:
     maxReplicas: 50
     targetCPUUtilizationPercentage: 80
     targetMemoryUtilizationPercentage: 70
+    # KEDA replaces the cpu/memory HPA above (targetCPU/targetMemory are then ignored) and scales on request
+    # throughput. Requires the KEDA operator/CRDs in the cluster, podMonitor.enabled (exposes the metrics endpoint)
+    # and a Prometheus scraping the gateway metrics port.
+    keda:
+      enabled: false
+      pollingInterval: 30
+      cooldownPeriod: 300
+      # Prometheus URL used by the default trigger below, e.g. "http://prometheus.<namespace>.svc.cluster.local:9090".
+      prometheusServerAddress: ""
+      # KEDA triggers: a YAML list or a template string (rendered with tpl, root context as "$"). Overriding it replaces
+      # the default entirely, so the guards below only apply while the default is in use.
+      # The default scales on request throughput: the query is the total requests/s across all pods (KEDA divides it by
+      # the replica count, so do not divide by pods) and the threshold is the target requests/s per replica.
+      triggers: |-
+        {{- if not $.Values.serviceLlmGateway.podMonitor.enabled }}
+        {{- fail "serviceLlmGateway.podMonitor.enabled must be true for the default KEDA trigger: it reads llm_gateway_requests_total from the metrics endpoint" }}
+        {{- end -}}
+        - type: prometheus
+          metadata:
+            serverAddress: {{ required "serviceLlmGateway.autoscaling.keda.prometheusServerAddress is required by the default KEDA trigger" $.Values.serviceLlmGateway.autoscaling.keda.prometheusServerAddress | quote }}
+            query: sum(rate(llm_gateway_requests_total[2m]))
+            threshold: "100"
+      # Extra KEDA triggers appended after "triggers" (e.g. cpu/memory), rendered as-is.
+      extraTriggers: []
   podMonitor:
     enabled: false
     metricsPort: 8002
@@ -195,6 +219,7 @@ serviceLlmGateway:
     - serviceId: service-playbook-execution
     - serviceId: service-search-orchestrator
     - serviceId: service-insights-api
+    - serviceId: service-platform-agent
   # callerSecrets: external / dynamic callers unique to a specific deployment.
   # e.g. third-party integrations or sealed-secret-managed tokens.
   callerSecrets: []

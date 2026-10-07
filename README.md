@@ -108,6 +108,12 @@ kubectl logs -n <release-namespace> -l app.kubernetes.io/name=llm-gateway-app --
 | `serviceLlmGateway.priorityClassName` | PriorityClass name for the pod | `""` |
 | `serviceLlmGateway.service.annotations` | Additional Service annotations | `{}` |
 | `serviceLlmGateway.autoscaling.enabled` | Enable HPA | `true` |
+| `serviceLlmGateway.autoscaling.keda.enabled` | Replace the cpu/memory HPA with a KEDA `ScaledObject` scaling on request throughput (`targetCPU/MemoryUtilizationPercentage` are then ignored). Requires the KEDA CRDs, `serviceLlmGateway.podMonitor.enabled=true` (the chart fails to render otherwise) and a Prometheus scraping the gateway metrics port. | `false` |
+| `serviceLlmGateway.autoscaling.keda.pollingInterval` | Seconds between KEDA trigger evaluations | `30` |
+| `serviceLlmGateway.autoscaling.keda.cooldownPeriod` | Seconds KEDA waits after the last active trigger before scaling to zero (only relevant with `minReplicas: 0`) | `300` |
+| `serviceLlmGateway.autoscaling.keda.prometheusServerAddress` | Prometheus URL used by the default trigger. Required while the default `triggers` is in use. | `""` |
+| `serviceLlmGateway.autoscaling.keda.triggers` | KEDA triggers as a YAML list or a template string (rendered with `tpl`, root context `$`). The default is a `prometheus` trigger on `sum(rate(llm_gateway_requests_total[2m]))` with a target of `"100"` requests/s per replica; overriding it replaces the default (and its `podMonitor`/`prometheusServerAddress` guards). | _(prometheus throughput trigger)_ |
+| `serviceLlmGateway.autoscaling.keda.extraTriggers` | Additional KEDA triggers appended as-is after `triggers` (e.g. cpu/memory) | `[]` |
 | `serviceLlmGateway.podDisruptionBudget.enabled` | Enable PDB | `false` |
 | `serviceLlmGateway.podDisruptionBudget.minAvailable` | Min available pods (used when enabled) | `1` |
 | `serviceLlmGateway.podDisruptionBudget.maxUnavailable` | Max unavailable pods (used when enabled) | `""` |
@@ -115,7 +121,7 @@ kubectl logs -n <release-namespace> -l app.kubernetes.io/name=llm-gateway-app --
 | `serviceLlmGateway.encryptionKey.value` | Literal encryption key for local dev. Empty = auto-generated on first install. | `""` |
 | `serviceLlmGateway.jwtSecret.existingSecret` | Pre-existing Secret containing the JWT secret (Flux/sealed-secrets). When set, chart skips creation. | `""` |
 | `serviceLlmGateway.jwtSecret.value` | Literal JWT secret for local dev. Empty = auto-generated on first install. | `""` |
-| `serviceLlmGateway.staticCallerSecrets` | Pre-defaulted list of Cognigy-AI consuming services (`service-ai`, `service-api`, `service-agents`, `service-resources`, `service-playbook-execution`, `service-search-orchestrator`). Each auto-creates a Secret and injects `SERVICE_SECRET_<ID>`. Override only to change the defaults. | _(6 entries)_ |
+| `serviceLlmGateway.staticCallerSecrets` | Pre-defaulted list of Cognigy-AI consuming services (`service-ai`, `service-api`, `service-agents`, `service-resources`, `service-playbook-execution`, `service-search-orchestrator`, `service-insights-api`, `service-platform-agent`). Each auto-creates a Secret and injects `SERVICE_SECRET_<ID>`. Override only to change the defaults. | _(8 entries)_ |
 | `serviceLlmGateway.callerSecrets` | External / dynamic callers unique to a deployment (e.g. third-party integrations). Same `{serviceId, existingSecret?, existingSecretKey?}` shape. Concatenated with `staticCallerSecrets` at render time. | `[]` |
 | `database.type` | Database backend — only `"mongodb"` is currently supported | `"mongodb"` |
 | `mongodb.scheme` | Connection scheme: `"mongodb"` for self-hosted, `"mongodb+srv"` for Atlas | `"mongodb"` |

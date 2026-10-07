@@ -1,5 +1,33 @@
 {{- if .Values.serviceLlmGateway.autoscaling.enabled }}
+{{- $keda := .Values.serviceLlmGateway.autoscaling.keda }}
 ---
+{{- if $keda.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "llm-gateway-app.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "llm-gateway-app.labels" . | nindent 4 }}
+  annotations:
+    # adopt an existing HPA of the same name instead of failing on the duplicate
+    scaledobject.keda.sh/transfer-hpa-ownership: "true"
+spec:
+  scaleTargetRef:
+    name: {{ include "llm-gateway-app.fullname" . }}
+  pollingInterval: {{ $keda.pollingInterval }}
+  cooldownPeriod: {{ $keda.cooldownPeriod }}
+  minReplicaCount: {{ .Values.serviceLlmGateway.autoscaling.minReplicas }}
+  maxReplicaCount: {{ .Values.serviceLlmGateway.autoscaling.maxReplicas }}
+  triggers:
+    {{- include "llm-gateway-app.tplvalues.render" (dict "value" $keda.triggers "context" $) | nindent 4 }}
+    {{- with $keda.extraTriggers }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  advanced:
+    horizontalPodAutoscalerConfig:
+      name: {{ include "llm-gateway-app.fullname" . }}
+{{- else }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -27,4 +55,5 @@ spec:
         target:
           type: Utilization
           averageUtilization: {{ .Values.serviceLlmGateway.autoscaling.targetMemoryUtilizationPercentage }}
+{{- end }}
 {{- end }}
