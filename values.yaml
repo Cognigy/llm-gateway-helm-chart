@@ -71,9 +71,17 @@ serviceLlmGateway:
   image:
     name: service-llm-gateway
     pullPolicy: IfNotPresent
-    tag: v1.2.0
+    tag: v1.2.1
   # Per-service extra environment variables. Each entry follows the standard
   # Kubernetes env var format: {name: FOO, value: bar} or valueFrom.
+  #
+  # To limit the total duration of one streaming LLM call, set
+  # LLM_GATEWAY_MAX_STREAMING_CALL_DURATION_IN_MS (milliseconds). When the limit is hit, the
+  # call fails with a timeout error. Defaults to "100000" (100 s), kept below service-ai's
+  # 120 s message timeout; "0" turns the limit off. Example:
+  #   extraEnvVars:
+  #     - name: LLM_GATEWAY_MAX_STREAMING_CALL_DURATION_IN_MS
+  #       value: "100000"
   extraEnvVars: []
   service:
     type: ClusterIP
