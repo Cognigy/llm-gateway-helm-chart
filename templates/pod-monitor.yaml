@@ -1,4 +1,4 @@
-{{- if .Values.serviceLlmGateway.podMonitor.enabled }}
+{{- if and .Values.serviceLlmGateway.podMonitor.enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") }}
 {{- $podMonitorNamespace := .Values.serviceLlmGateway.podMonitor.namespace | default .Release.Namespace }}
 ---
 apiVersion: monitoring.coreos.com/v1

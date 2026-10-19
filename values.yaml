@@ -47,6 +47,9 @@ llmGatewayEnv:
   RABBITMQ_ENABLE_RECONNECT: true
   RABBITMQ_TOKEN_USAGE_EXCHANGE: token-usage-exchange
   RABBITMQ_TOKEN_USAGE_ROUTING_KEY: token-usage.events
+  # Feature flag, off by default. Set to "true" to force HTTP/1.1 for openai-compatible providers
+  # (legacy parity; Node's default h2 is reset by some customer front ends with NGHTTP2_INTERNAL_ERROR).
+  # FEATURE_OPENAI_COMPATIBLE_FORCE_HTTP1_ENABLED: "true"
 ## OpenTelemetry observability.
 observability:
   ## Base URL of the OpenTelemetry Collector OTLP/HTTP receiver (port 4318).
@@ -71,7 +74,7 @@ serviceLlmGateway:
   image:
     name: service-llm-gateway
     pullPolicy: IfNotPresent
-    tag: v1.2.1
+    tag: v1.2.2
   # Per-service extra environment variables. Each entry follows the standard
   # Kubernetes env var format: {name: FOO, value: bar} or valueFrom.
   #

@@ -138,7 +138,7 @@ kubectl logs -n <release-namespace> -l app.kubernetes.io/name=llm-gateway-app --
 | `mongodb.connectionString` | Literal MongoDB connection string for local dev/testing (skipped when `dbinit.enabled` is true) | `""` |
 | `serviceLlmGateway.rabbitmq.existingSecret` | Name of a pre-existing Secret containing the RabbitMQ connection string (preferred in Flux-managed environments). When set, `connectionString` is ignored. | `"cognigy-rabbitmq"` |
 | `serviceLlmGateway.rabbitmq.connectionString` | Literal RabbitMQ connection string (`amqp://user:pass@host:port`). The chart creates a Secret and mounts the value as a file. | `""` |
-| `serviceLlmGateway.podMonitor.enabled` | Enable Prometheus PodMonitor | `true` |
+| `serviceLlmGateway.podMonitor.enabled` | Enable Prometheus PodMonitor. The `PodMonitor` is only rendered when the `monitoring.coreos.com/v1` API (Prometheus Operator CRDs) is available in the cluster, so a fresh cluster without the monitoring stack installs cleanly and gets the monitor on the next upgrade once the CRDs exist. | `true` |
 | `serviceLlmGateway.podMonitor.metricsPort` | Prometheus metrics port | `8002` |
 | `serviceLlmGateway.podMonitor.namespace` | Namespace for the PodMonitor resource | `""` (release namespace) |
 | `serviceAccount.create` | Create a ServiceAccount | `false` |
