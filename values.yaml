@@ -74,7 +74,7 @@ serviceLlmGateway:
   image:
     name: service-llm-gateway
     pullPolicy: IfNotPresent
-    tag: v1.2.4
+    tag: v1.2.5
   # Per-service extra environment variables. Each entry follows the standard
   # Kubernetes env var format: {name: FOO, value: bar} or valueFrom.
   #
@@ -338,8 +338,9 @@ mongodb:
       # Keep this higher than the mongodb Secret hook weight (-2) so the
       # secret is created before the Job reads it.
       weight: "-1"
-      # Helm hook delete policy for the db-init Job.
-      deletePolicy: before-hook-creation
+      # Helm hook delete policy for the db-init Job. hook-succeeded removes the
+      # finished pod right away; failed Jobs are kept for debugging until the next run.
+      deletePolicy: before-hook-creation,hook-succeeded
     # Number of retries before marking the Job as failed.
     backoffLimit: 3
     # Pod restart policy.

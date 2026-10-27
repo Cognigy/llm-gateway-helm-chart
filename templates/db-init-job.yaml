@@ -24,7 +24,7 @@ metadata:
   name: {{ include "llm-gateway-app.fullname" . }}-db-init
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "llm-gateway-app.labels" . | nindent 4 }}
+    {{- include "llm-gateway-app.dbInitLabels" . | nindent 4 }}
     app.kubernetes.io/component: db-init
   annotations:
     "helm.sh/hook": {{ .Values.mongodb.dbinit.helmHook.hook }}
@@ -39,7 +39,7 @@ spec:
     metadata:
       name: {{ include "llm-gateway-app.fullname" . }}-db-init
       labels:
-        {{- include "llm-gateway-app.labels" . | nindent 8 }}
+        {{- include "llm-gateway-app.dbInitLabels" . | nindent 8 }}
         app.kubernetes.io/component: db-init
     spec:
       restartPolicy: {{ .Values.mongodb.dbinit.restartPolicy }}

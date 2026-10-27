@@ -41,17 +41,42 @@ Example: llm-gateway-app-0.1.0
 
 {{/*
 -------------------------------------------------------------------------------
-Common Kubernetes recommended labels applied to every resource.
+Recommended labels shared by every resource, without the selector labels.
 -------------------------------------------------------------------------------
 */}}
-{{- define "llm-gateway-app.labels" -}}
+{{- define "llm-gateway-app.metadataLabels" -}}
 helm.sh/chart: {{ include "llm-gateway-app.chart" . }}
-{{ include "llm-gateway-app.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 owner-team: {{ .Values.ownerTeam }}
+{{- end }}
+
+
+{{/*
+-------------------------------------------------------------------------------
+Common Kubernetes recommended labels applied to every resource.
+-------------------------------------------------------------------------------
+*/}}
+{{- define "llm-gateway-app.labels" -}}
+{{ include "llm-gateway-app.selectorLabels" . }}
+{{ include "llm-gateway-app.metadataLabels" . }}
+{{- end }}
+
+
+{{/*
+-------------------------------------------------------------------------------
+Labels for the db-init Job and its pod. The name label is suffixed (and truncated
+to leave room for it within the 63-character limit) so the pod never matches the
+selector labels of the Deployment, HPA, Service, PDB or PodMonitor (a stray pod
+without resource requests disables HPA scaling).
+-------------------------------------------------------------------------------
+*/}}
+{{- define "llm-gateway-app.dbInitLabels" -}}
+app.kubernetes.io/name: {{ include "llm-gateway-app.name" . | trunc 54 | trimSuffix "-" }}-db-init
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{ include "llm-gateway-app.metadataLabels" . }}
 {{- end }}
 
 
