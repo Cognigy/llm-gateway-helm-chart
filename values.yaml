@@ -74,7 +74,7 @@ serviceLlmGateway:
   image:
     name: service-llm-gateway
     pullPolicy: IfNotPresent
-    tag: v1.3.2
+    tag: v1.3.3
   # Per-service extra environment variables. Each entry follows the standard
   # Kubernetes env var format: {name: FOO, value: bar} or valueFrom.
   #
@@ -93,7 +93,7 @@ serviceLlmGateway:
   resources:
     requests:
       cpu: 0.3
-      memory: 256Mi
+      memory: 350Mi
     limits:
       cpu: 0.5
       memory: 512Mi
