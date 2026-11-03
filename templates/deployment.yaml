@@ -1,3 +1,8 @@
+{{- $drainSeconds := div (int .Values.serviceLlmGateway.shutdownDrainTimeoutMs) 1000 -}}
+{{- $minGraceSeconds := add (add (int .Values.serviceLlmGateway.lifecycle.preStopSleepSeconds) $drainSeconds) 45 -}}
+{{- if lt (int .Values.serviceLlmGateway.terminationGracePeriodSeconds) $minGraceSeconds -}}
+{{- fail (printf "serviceLlmGateway.terminationGracePeriodSeconds (%d) is too low: it must be >= preStopSleepSeconds (%ds) + shutdownDrainTimeoutMs (%dms ~= %ds) + 45s slack = %ds, or Kubernetes will SIGKILL mid-drain and skip the Kafka/RabbitMQ/Redis shutdown hooks" (int .Values.serviceLlmGateway.terminationGracePeriodSeconds) (int .Values.serviceLlmGateway.lifecycle.preStopSleepSeconds) (int .Values.serviceLlmGateway.shutdownDrainTimeoutMs) $drainSeconds $minGraceSeconds) -}}
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -129,6 +134,8 @@ spec:
           env:
             - name: PORT
               value: {{ .Values.serviceLlmGateway.service.port | toString | quote }}
+            - name: SHUTDOWN_DRAIN_TIMEOUT_MS
+              value: {{ .Values.serviceLlmGateway.shutdownDrainTimeoutMs | toString | quote }}
             - name: METRICS_ENABLED
               value: {{ .Values.serviceLlmGateway.podMonitor.enabled | toString | quote }}
             - name: METRICS_PORT

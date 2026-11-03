@@ -60,7 +60,14 @@ observability:
   tracesSampler: "parentbased_always_on"
 serviceLlmGateway:
   replicaCount: 3
-  # grace = preStop sleep + longest expected stream + slack (15 + 300 + 45 = 360 s)
+  # Max time to wait for open HTTP connections to drain on shutdown before force-closing them, sized for the
+  # longest expected stream. Sets the SHUTDOWN_DRAIN_TIMEOUT_MS env var. Templated into
+  # terminationGracePeriodSeconds below (grace = preStop sleep + this + 45s slack) so the two can't drift —
+  # the template fails the render if terminationGracePeriodSeconds is overridden too low for this value.
+  shutdownDrainTimeoutMs: 300000
+  # grace = preStop sleep + HTTP drain timeout + slack (15 + 300 + 45 = 360 s). See shutdownDrainTimeoutMs
+  # above and lifecycle.preStopSleepSeconds below — raising either without raising this will make the
+  # template fail.
   terminationGracePeriodSeconds: 360
   strategy:
     type: RollingUpdate
@@ -74,7 +81,7 @@ serviceLlmGateway:
   image:
     name: service-llm-gateway
     pullPolicy: IfNotPresent
-    tag: v1.3.3
+    tag: v1.3.4
   # Per-service extra environment variables. Each entry follows the standard
   # Kubernetes env var format: {name: FOO, value: bar} or valueFrom.
   #
@@ -128,8 +135,7 @@ serviceLlmGateway:
     minReplicas: 3
     maxReplicas: 50
     targetCPUUtilizationPercentage: 80
-    targetMemoryUtilizationPercentage: 70
-    # KEDA replaces the cpu/memory HPA above (targetCPU/targetMemory are then ignored) and scales on request
+    # KEDA replaces the cpu HPA above (targetCPU is then ignored) and scales on request
     # throughput. Requires the KEDA operator/CRDs in the cluster, podMonitor.enabled (exposes the metrics endpoint)
     # and a Prometheus scraping the gateway metrics port.
     keda:
@@ -151,7 +157,7 @@ serviceLlmGateway:
             serverAddress: {{ required "serviceLlmGateway.autoscaling.keda.prometheusServerAddress is required by the default KEDA trigger" $.Values.serviceLlmGateway.autoscaling.keda.prometheusServerAddress | quote }}
             query: sum(rate(llm_gateway_requests_total[2m]))
             threshold: "100"
-      # Extra KEDA triggers appended after "triggers" (e.g. cpu/memory), rendered as-is.
+      # Extra KEDA triggers appended after "triggers" (e.g. cpu), rendered as-is.
       extraTriggers: []
   podMonitor:
     enabled: false
@@ -259,8 +265,15 @@ serviceLlmGateway:
     minAvailable: 1
     maxUnavailable: ""
   affinity: {}
-  tolerations: []
-  nodeSelector: {}
+  # Default: run on the cluster-autoscaler managed node pool, so HPA/KEDA scale-out can trigger node scale-up
+  # instead of leaving pods Pending on a full, non-autoscaled pool. Override both to schedule elsewhere.
+  tolerations:
+    - key: node-role.cognigy.ai
+      operator: Equal
+      value: autoscaler
+      effect: NoSchedule
+  nodeSelector:
+    node-role: autoscaler
   podAnnotations: {}
   podSecurityContext: {}
   priorityClassName: ""

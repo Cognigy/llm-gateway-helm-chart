@@ -49,11 +49,5 @@ spec:
         target:
           type: Utilization
           averageUtilization: {{ .Values.serviceLlmGateway.autoscaling.targetCPUUtilizationPercentage }}
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: {{ .Values.serviceLlmGateway.autoscaling.targetMemoryUtilizationPercentage }}
 {{- end }}
 {{- end }}

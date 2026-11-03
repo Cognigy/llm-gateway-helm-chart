@@ -106,14 +106,16 @@ kubectl logs -n <release-namespace> -l app.kubernetes.io/name=llm-gateway-app --
 | `serviceLlmGateway.resources.limits.cpu` | CPU limit | `500m` |
 | `serviceLlmGateway.resources.limits.memory` | Memory limit | `512Mi` |
 | `serviceLlmGateway.priorityClassName` | PriorityClass name for the pod | `""` |
+| `serviceLlmGateway.nodeSelector` | Pod node selector. Defaults to the cluster-autoscaler managed pool; clusters without a node labelled `node-role=autoscaler` must override it (e.g. `{}`) or pods stay Pending. | `{node-role: autoscaler}` |
+| `serviceLlmGateway.tolerations` | Pod tolerations. Defaults to tolerating the autoscaler pool taint `node-role.cognigy.ai=autoscaler:NoSchedule`. | _(autoscaler taint toleration)_ |
 | `serviceLlmGateway.service.annotations` | Additional Service annotations | `{}` |
 | `serviceLlmGateway.autoscaling.enabled` | Enable HPA | `true` |
-| `serviceLlmGateway.autoscaling.keda.enabled` | Replace the cpu/memory HPA with a KEDA `ScaledObject` scaling on request throughput (`targetCPU/MemoryUtilizationPercentage` are then ignored). Requires the KEDA CRDs, `serviceLlmGateway.podMonitor.enabled=true` (the chart fails to render otherwise) and a Prometheus scraping the gateway metrics port. | `false` |
+| `serviceLlmGateway.autoscaling.keda.enabled` | Replace the cpu HPA with a KEDA `ScaledObject` scaling on request throughput (`targetCPUUtilizationPercentage` is then ignored). Requires the KEDA CRDs, `serviceLlmGateway.podMonitor.enabled=true` (the chart fails to render otherwise) and a Prometheus scraping the gateway metrics port. | `false` |
 | `serviceLlmGateway.autoscaling.keda.pollingInterval` | Seconds between KEDA trigger evaluations | `30` |
 | `serviceLlmGateway.autoscaling.keda.cooldownPeriod` | Seconds KEDA waits after the last active trigger before scaling to zero (only relevant with `minReplicas: 0`) | `300` |
 | `serviceLlmGateway.autoscaling.keda.prometheusServerAddress` | Prometheus URL used by the default trigger. Required while the default `triggers` is in use. | `""` |
 | `serviceLlmGateway.autoscaling.keda.triggers` | KEDA triggers as a YAML list or a template string (rendered with `tpl`, root context `$`). The default is a `prometheus` trigger on `sum(rate(llm_gateway_requests_total[2m]))` with a target of `"100"` requests/s per replica; overriding it replaces the default (and its `podMonitor`/`prometheusServerAddress` guards). | _(prometheus throughput trigger)_ |
-| `serviceLlmGateway.autoscaling.keda.extraTriggers` | Additional KEDA triggers appended as-is after `triggers` (e.g. cpu/memory) | `[]` |
+| `serviceLlmGateway.autoscaling.keda.extraTriggers` | Additional KEDA triggers appended as-is after `triggers` (e.g. cpu) | `[]` |
 | `serviceLlmGateway.podDisruptionBudget.enabled` | Enable PDB | `false` |
 | `serviceLlmGateway.podDisruptionBudget.minAvailable` | Min available pods (used when enabled) | `1` |
 | `serviceLlmGateway.podDisruptionBudget.maxUnavailable` | Max unavailable pods (used when enabled) | `""` |
