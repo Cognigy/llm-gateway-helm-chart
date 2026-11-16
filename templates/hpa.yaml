@@ -1,7 +1,7 @@
 {{- if .Values.serviceLlmGateway.autoscaling.enabled }}
 {{- $keda := .Values.serviceLlmGateway.autoscaling.keda }}
 ---
-{{- if $keda.enabled }}
+{{- if include "llm-gateway-app.keda.active" . }}
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
@@ -24,6 +24,10 @@ spec:
     {{- with $keda.extraTriggers }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
+  fallback:
+    # hold this many replicas while the Prometheus query keeps failing
+    failureThreshold: {{ $keda.fallback.failureThreshold }}
+    replicas: {{ $keda.fallback.replicas }}
   advanced:
     horizontalPodAutoscalerConfig:
       name: {{ include "llm-gateway-app.fullname" . }}

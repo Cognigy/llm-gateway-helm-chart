@@ -246,3 +246,24 @@ Usage: {{ include "llm-gateway-app.tplvalues.render" (dict "value" .Values.path.
 {{- tpl (.value | toYaml) .context }}
 {{- end }}
 {{- end -}}
+
+{{/*
+Prometheus URL for the KEDA trigger: the explicit keda.prometheusServerAddress, else the in-cluster Service URL.
+*/}}
+{{- define "llm-gateway-app.keda.prometheusAddress" -}}
+{{- $keda := .Values.serviceLlmGateway.autoscaling.keda -}}
+{{- $keda.prometheusServerAddress | default (printf "http://%s.%s.svc.cluster.local:%v" $keda.prometheus.serviceName $keda.prometheus.namespace $keda.prometheus.port) -}}
+{{- end -}}
+
+{{/*
+Renders "true" when the KEDA ScaledObject should be used instead of the cpu HPA: keda.enabled, the KEDA CRDs are
+installed, and Prometheus is there (an explicit prometheusServerAddress is trusted; otherwise its Service must exist).
+Evaluated at install/upgrade only; lookup is empty under `helm template`/--dry-run, so pass --api-versions
+keda.sh/v1alpha1 and prometheusServerAddress to render the ScaledObject offline.
+*/}}
+{{- define "llm-gateway-app.keda.active" -}}
+{{- $keda := .Values.serviceLlmGateway.autoscaling.keda -}}
+{{- if and $keda.enabled (.Capabilities.APIVersions.Has "keda.sh/v1alpha1") (or $keda.prometheusServerAddress (lookup "v1" "Service" $keda.prometheus.namespace $keda.prometheus.serviceName)) -}}
+true
+{{- end -}}
+{{- end -}}

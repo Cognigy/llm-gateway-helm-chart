@@ -81,7 +81,7 @@ serviceLlmGateway:
   image:
     name: service-llm-gateway
     pullPolicy: IfNotPresent
-    tag: v1.3.4
+    tag: v1.4.0
   # Per-service extra environment variables. Each entry follows the standard
   # Kubernetes env var format: {name: FOO, value: bar} or valueFrom.
   #
@@ -135,15 +135,26 @@ serviceLlmGateway:
     minReplicas: 3
     maxReplicas: 50
     targetCPUUtilizationPercentage: 80
-    # KEDA replaces the cpu HPA above (targetCPU is then ignored) and scales on request
-    # throughput. Requires the KEDA operator/CRDs in the cluster, podMonitor.enabled (exposes the metrics endpoint)
-    # and a Prometheus scraping the gateway metrics port.
+    # KEDA is the default autoscaler: it replaces the cpu HPA above (targetCPU is then ignored) and scales on request
+    # throughput. Set keda.enabled=false to always use the plain cpu HPA.
+    # Requires the KEDA operator/CRDs in the cluster, podMonitor.enabled (exposes the metrics endpoint)
+    # and a Prometheus scraping the gateway metrics port. At install/upgrade the chart falls back to the cpu HPA
+    # when the KEDA CRDs or the Prometheus Service (below) are missing.
     keda:
-      enabled: false
+      enabled: true
       pollingInterval: 30
       cooldownPeriod: 300
-      # Prometheus URL used by the default trigger below, e.g. "http://prometheus.<namespace>.svc.cluster.local:9090".
+      # In-cluster Prometheus Service: gates KEDA (must exist) and builds the default trigger's URL.
+      prometheus:
+        serviceName: monitoring-stack-kubeproms-prometheus
+        namespace: monitoring
+        port: 9090
+      # Override the Prometheus URL (e.g. an external Prometheus). When set, the Service existence check is skipped.
       prometheusServerAddress: ""
+      # While the trigger query keeps failing (Prometheus down), hold this many replicas instead of erroring.
+      fallback:
+        failureThreshold: 3
+        replicas: 5
       # KEDA triggers: a YAML list or a template string (rendered with tpl, root context as "$"). Overriding it replaces
       # the default entirely, so the guards below only apply while the default is in use.
       # The default scales on request throughput: the query is the total requests/s across all pods (KEDA divides it by
@@ -154,13 +165,13 @@ serviceLlmGateway:
         {{- end -}}
         - type: prometheus
           metadata:
-            serverAddress: {{ required "serviceLlmGateway.autoscaling.keda.prometheusServerAddress is required by the default KEDA trigger" $.Values.serviceLlmGateway.autoscaling.keda.prometheusServerAddress | quote }}
+            serverAddress: {{ include "llm-gateway-app.keda.prometheusAddress" $ | quote }}
             query: sum(rate(llm_gateway_requests_total[2m]))
-            threshold: "100"
+            threshold: "10"
       # Extra KEDA triggers appended after "triggers" (e.g. cpu), rendered as-is.
       extraTriggers: []
   podMonitor:
-    enabled: false
+    enabled: true
     metricsPort: 8002
     path: /metrics
     # Namespace where the PodMonitor resource is deployed. Should match the
@@ -276,7 +287,10 @@ serviceLlmGateway:
     node-role: autoscaler
   podAnnotations: {}
   podSecurityContext: {}
-  priorityClassName: ""
+  # "high" (same as service-resources / service-ai): without it the pods get priority 0, so any
+  # higher-priority pod that does not fit (e.g. during a cognigy-ai rollout) can preempt all gateway
+  # pods at once (CGY-47889). The PriorityClass must exist in the cluster; set "" to run without one.
+  priorityClassName: "high"
 # Service Account
 serviceAccount:
   create: false
