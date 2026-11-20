@@ -20,6 +20,9 @@ data:
           "credentialScheme": {{ $cs.credentialScheme | quote }},
           "credentialsEncrypted": {{ $cs.credentialsEncrypted | quote }},
           "providerConfig": {{ $cs.providerConfig | toJson }}
+          {{- with $cs.providerOptions }},
+          "providerOptions": {{ . | toJson }}
+          {{- end }}
         }
         {{- end }}
       ],
